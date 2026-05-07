@@ -1,0 +1,1 @@
+my-service: 5 replicas, debug=true

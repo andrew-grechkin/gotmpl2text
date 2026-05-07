@@ -1,0 +1,6 @@
+Service: {{ .name }}
+Replicas: {{ .replicas }}
+Timeout: {{ .config.timeout }}
+Debug: {{ .config.debug }}
+Cache: {{ .config.cache }}
+First Dir: {{ index .dirs 0 }}

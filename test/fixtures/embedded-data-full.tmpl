@@ -1,0 +1,16 @@
+{{- define "greeting" -}}
+Hello {{ .name }}!
+{{- end -}}
+{{ include "greeting" . | upper }}
+
+Items:
+{{- range .items }}
+  - {{ . }}
+{{- end }}
+{{/* __DATA__
+name: embedded
+items:
+  - alpha
+  - beta
+  - gamma
+*/}}

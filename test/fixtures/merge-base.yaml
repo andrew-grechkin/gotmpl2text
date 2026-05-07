@@ -1,0 +1,8 @@
+---
+config:
+  debug: false
+  timeout: 30
+dirs:
+  - /usr/local/git_tree/main
+name: base-service
+replicas: 3

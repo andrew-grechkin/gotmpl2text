@@ -1,0 +1,7 @@
+---
+config:
+  cache: enabled
+  debug: true
+dirs:
+  - /usr/local/git_tree/backend_static
+replicas: 5

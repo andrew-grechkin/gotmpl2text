@@ -1,0 +1,6 @@
+HELLO EMBEDDED!
+
+Items:
+  - alpha
+  - beta
+  - gamma

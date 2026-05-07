@@ -1,0 +1,1 @@
+my-service: replicas=10, env=prod

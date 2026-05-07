@@ -1,0 +1,6 @@
+config:{{ .config | toYaml | nindent 2 }}
+{{/* __DATA__
+config:
+  timeout: 30
+  debug: true
+*/}}

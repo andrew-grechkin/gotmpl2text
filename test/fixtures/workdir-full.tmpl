@@ -1,0 +1,13 @@
+{{- define "utils.workdirSelectOneFrom" -}}
+  {{- $dirs := .dirs -}}
+  {{- $first := index $dirs 0 -}}
+<+input>.default({{ $first }}).selectOneFrom({{- range $i, $dir := $dirs -}}
+    {{- if $i -}},{{- end -}}{{ $dir }}
+  {{- end -}})
+{{- end -}}
+{{- template "utils.workdirSelectOneFrom" . -}}
+{{/* __DATA__
+dirs:
+  - /usr/local/git_tree/main
+  - /usr/local/git_tree/backend_static
+*/}}

@@ -1,0 +1,24 @@
+{{- define "helper.upper" -}}
+{{ .text | upper }}
+{{- end -}}
+
+{{- define "helper.indent" -}}
+line1
+line2
+line3
+{{- end -}}
+
+Test include: {{ include "helper.upper" (dict "text" "hello") }}
+Test required: {{ required "name is required" .name }}
+Test toYaml:
+{{ .config | toYaml | nindent 2 }}
+Test indent:
+{{ include "helper.indent" . | indent 4 }}
+{{/* __DATA__
+config:
+  nested:
+    deep: value
+  timeout: 30
+name: test-service
+replicas: 3
+*/}}

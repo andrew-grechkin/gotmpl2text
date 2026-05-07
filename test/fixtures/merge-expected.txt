@@ -1,0 +1,6 @@
+Service: base-service
+Replicas: 5
+Timeout: 30
+Debug: true
+Cache: enabled
+First Dir: /usr/local/git_tree/backend_static

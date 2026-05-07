@@ -1,0 +1,4 @@
+{{- define "helper" -}}Hello {{ .name }}{{- end -}}{{ include "helper" . | upper }}
+{{/* __DATA__
+name: world
+*/}}

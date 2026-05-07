@@ -1,0 +1,14 @@
+{{ .name }}: {{ .replicas }} replicas, debug={{ .config.debug }}, cache={{ .config.cache }}
+{{/* __DATA__
+name: my-service
+replicas: 3
+config:
+  timeout: 30
+  debug: false
+*/}}
+{{/* __DATA__
+replicas: 5
+config:
+  debug: true
+  cache: enabled
+*/}}
