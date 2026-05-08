@@ -97,8 +97,6 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		}
 	}
 
-	dataFiles := args[1:]
-
 	tmplBytes, err := io.ReadAll(stdin)
 	if err != nil {
 		return fmt.Errorf("error reading template from STDIN: %w", err)
@@ -109,41 +107,17 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 
 	var allDataMaps []map[string]any
 
-	// 1. Collect all embedded data blocks (in order)
-	if len(embeddedDataBlocks) > 0 {
-		for i, block := range embeddedDataBlocks {
-			var blockData map[string]any
-			if err := yaml.Unmarshal([]byte(block), &blockData); err != nil {
-				return fmt.Errorf("error parsing embedded YAML data block %d: %w", i+1, err)
-			}
-			allDataMaps = append(allDataMaps, blockData)
-		}
+	if allDataMaps, err = collectDataFromEmbeddedBlocks(allDataMaps, embeddedDataBlocks); err != nil {
+		return err
 	}
 
-	// 2. Collect all data files (in order)
-	for _, dataFile := range dataFiles {
-		dataBytes, err := os.ReadFile(dataFile)
-		if err != nil {
-			return fmt.Errorf("error reading data file %s: %w", dataFile, err)
-		}
-
-		var fileData map[string]any
-		if err := yaml.Unmarshal(dataBytes, &fileData); err != nil {
-			return fmt.Errorf("error parsing YAML data from %s: %w", dataFile, err)
-		}
-		allDataMaps = append(allDataMaps, fileData)
+	if allDataMaps, err = collectDataFromFiles(allDataMaps, args); err != nil {
+		return err
 	}
 
-	// 3. Merge them all in one go
 	var data map[string]any
-	for _, dataMap := range allDataMaps {
-		if data == nil {
-			data = dataMap
-		} else {
-			if err := mergo.Merge(&data, dataMap, mergo.WithOverride); err != nil {
-				return fmt.Errorf("error merging data: %w", err)
-			}
-		}
+	if data, err = mergeAllDataMaps(allDataMaps); err != nil {
+		return err
 	}
 
 	// If no data provided, use empty map (allows self-contained templates using only sprig functions)
@@ -173,6 +147,50 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	return nil
 }
 
+func collectDataFromEmbeddedBlocks(allDataMaps []map[string]any, embeddedDataBlocks []string) ([]map[string]any, error) {
+	for i, block := range embeddedDataBlocks {
+		var blockData map[string]any
+		if err := yaml.Unmarshal([]byte(block), &blockData); err != nil {
+			return nil, fmt.Errorf("error parsing embedded YAML data block %d: %w", i+1, err)
+		}
+		allDataMaps = append(allDataMaps, blockData)
+	}
+	return allDataMaps, nil
+}
+
+func collectDataFromFiles(allDataMaps []map[string]any, args []string) ([]map[string]any, error) {
+	dataFiles := args[1:]
+
+	for _, dataFile := range dataFiles {
+		dataBytes, err := os.ReadFile(dataFile)
+		if err != nil {
+			return nil, fmt.Errorf("error reading data file %s: %w", dataFile, err)
+		}
+
+		var fileData map[string]any
+		if err := yaml.Unmarshal(dataBytes, &fileData); err != nil {
+			return nil, fmt.Errorf("error parsing YAML data from %s: %w", dataFile, err)
+		}
+		allDataMaps = append(allDataMaps, fileData)
+	}
+
+	return allDataMaps, nil
+}
+
+func mergeAllDataMaps(allDataMaps []map[string]any) (map[string]any, error) {
+	var data map[string]any
+	for _, dataMap := range allDataMaps {
+		if data == nil {
+			data = dataMap
+		} else {
+			if err := mergo.Merge(&data, dataMap, mergo.WithOverride); err != nil {
+				return nil, fmt.Errorf("error merging data: %w", err)
+			}
+		}
+	}
+	return data, nil
+}
+
 // splitTemplateData splits template content from embedded data sections
 // Returns (tmplText, dataBlocks) where dataBlocks contains all embedded YAML blocks
 // Looks for ALL {{/* __DATA__ */}} blocks and extracts them in order
@@ -180,12 +198,14 @@ func splitTemplateData(content string) (string, []string) {
 	// Go's regexp package shamefully doesn't support the (?x) free-spacing flag,
 	// so have to use string concatenation instead.
 	re := regexp.MustCompile(
-		`\{\{/\*` + // Match opening comment: {{/*
-			`\s*` + // Optional whitespace
-			`__DATA__` + // Match the expected data marker
-			`\s*` + // Optional whitespace
-			`([\s\S]*?)` + // Group 1: Capture the actual data (non-greedy)
-			`\*/\}\}`, // Match closing comment: */}}
+		`\n*` + // optional new lines
+			`\{\{/\*` + // match opening comment: {{/*
+			`\s*` + // optional whitespace
+			`__DATA__` + // match the expected data marker
+			`\s*` + // optional whitespace
+			`([\s\S]*?)` + // group 1: Capture the actual data (non-greedy)
+			`\*/\}\}` + // match closing comment: */}}
+			`\n*`, // optional new lines
 	)
 
 	var dataBlocks []string
@@ -197,7 +217,7 @@ func splitTemplateData(content string) (string, []string) {
 		}
 	}
 
-	tmplText := re.ReplaceAllString(content, "")
+	tmplText := re.ReplaceAllString(content, "\n")
 	return tmplText, dataBlocks
 }
 

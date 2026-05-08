@@ -28,6 +28,8 @@
 # Run all tests
 test: build test-unit
     #!/usr/bin/env bash
+    set -Eeuo pipefail
+
     for f in test/fixtures/*-expected.txt; do
         name=$(basename "$f" -expected.txt)
 

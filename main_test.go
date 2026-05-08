@@ -24,7 +24,7 @@ func TestSplitTemplateData(t *testing.T) {
 		{
 			name:       "multiple blocks",
 			content:    "Hello\n{{/* __DATA__\na: 1\n*/}}\nWorld\n{{/* __DATA__\nb: 2\n*/}}",
-			wantTmpl:   "Hello\n\nWorld\n",
+			wantTmpl:   "Hello\nWorld\n",
 			wantBlocks: []string{"a: 1", "b: 2"},
 		},
 		{
@@ -35,7 +35,7 @@ func TestSplitTemplateData(t *testing.T) {
 		},
 		{
 			name:       "whitespace variations",
-			content:    "Hello\n{{/*   __DATA__  \nspaced\n*/}}",
+			content:    "Hello\n\n\n{{/*   __DATA__  \nspaced\n*/}}\n\n\n",
 			wantTmpl:   "Hello\n",
 			wantBlocks: []string{"spaced"},
 		},
