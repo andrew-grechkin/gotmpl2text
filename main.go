@@ -44,8 +44,8 @@ This matches Helm's behavior: gotmpl2text base.yaml override.yaml
 
 Options:
   -h, --help        Display this help message
-  -m, --man         Display full readme
-  -v, --version     Display version information
+  -m, --man         Display full readme         (tip: gotmpl2text --man | colored-md)
+  -v, --version     Display version information (tip: gotmpl2text --version | jq -r .Version)
 
 Environment:
   GOTMPL_ALLOW_MISSING  Set to 1 to allow missing keys (renders <no value>)
