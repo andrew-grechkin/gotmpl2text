@@ -38,6 +38,10 @@ EO_TEMPLATE
 * -m, --man         Show full manual (this README)
 * -v, --version     Show version
 
+## ENVIRONMENT:
+
+* GOTMPL_ALLOW_MISSING=1: to allow missing keys (renders `<no value>`)
+
 ## INSTALLATION
 
 To install `gotmpl2text`:

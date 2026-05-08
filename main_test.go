@@ -114,3 +114,74 @@ func TestRunWhitespaceControl(t *testing.T) {
 		})
 	}
 }
+
+func TestRunMissingKeys(t *testing.T) {
+	tests := []struct {
+		name         string
+		template     string
+		allowMissing string
+		want         string
+		wantErr      bool
+	}{
+		{
+			name:         "missing key error (default)",
+			template:     "{{ .missing }}",
+			allowMissing: "",
+			want:         "",
+			wantErr:      true,
+		},
+		{
+			name:         "missing key allowed (env=1)",
+			template:     "{{ .missing }}",
+			allowMissing: "1",
+			want:         "<no value>",
+			wantErr:      false,
+		},
+		{
+			name:         "missing key allowed (env=true)",
+			template:     "{{ .missing }}",
+			allowMissing: "true",
+			want:         "<no value>",
+			wantErr:      false,
+		},
+		{
+			name:         "missing key error (env=0)",
+			template:     "{{ .missing }}",
+			allowMissing: "0",
+			want:         "",
+			wantErr:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Clear/Set env
+			if tt.allowMissing != "" {
+				os.Setenv("GOTMPL_ALLOW_MISSING", tt.allowMissing)
+			} else {
+				os.Unsetenv("GOTMPL_ALLOW_MISSING")
+			}
+			defer os.Unsetenv("GOTMPL_ALLOW_MISSING")
+
+			stdin := strings.NewReader(tt.template)
+			var stdout bytes.Buffer
+
+			err := run([]string{"gotmpl2text"}, stdin, &stdout)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("run() expected error for missing key, but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("run() failed: %v", err)
+			}
+
+			got := stdout.String()
+			if got != tt.want {
+				t.Errorf("run() got output %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

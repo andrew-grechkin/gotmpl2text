@@ -18,6 +18,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const (
+	TEMPLATE_NAME     = "STDIN"
+	ENV_ALLOW_MISSING = "GOTMPL_ALLOW_MISSING"
+	MISSINGKEY_ERROR  = "missingkey=error"
+	MISSINGKEY_ALLOW  = "missingkey=default"
+)
+
 const gnuHelpText = `Usage: gotmpl2text [OPTIONS] [FILE...]
 
 A CLI filter for testing and rendering Go templates with YAML/JSON data.
@@ -39,6 +46,9 @@ Options:
   -h, --help        Display this help message
   -m, --man         Display full readme
   -v, --version     Display version information
+
+Environment:
+  GOTMPL_ALLOW_MISSING  Set to 1 to allow missing keys (renders <no value>)
 
 Examples:
   gotmpl2text < template.tmpl base.yaml overrides.yaml
@@ -102,36 +112,22 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		return fmt.Errorf("error reading template from STDIN: %w", err)
 	}
 
-	// extract embedded __DATA__ sections from template
-	tmplContent, embeddedDataBlocks := splitTemplateData(string(tmplBytes))
-
-	var allDataMaps []map[string]any
-
-	if allDataMaps, err = collectDataFromEmbeddedBlocks(allDataMaps, embeddedDataBlocks); err != nil {
-		return err
-	}
-
-	if allDataMaps, err = collectDataFromFiles(allDataMaps, args); err != nil {
-		return err
-	}
-
-	var data map[string]any
-	if data, err = mergeAllDataMaps(allDataMaps); err != nil {
-		return err
-	}
-
-	// If no data provided, use empty map (allows self-contained templates using only sprig functions)
-	if data == nil {
-		data = make(map[string]any)
-	}
-
-	tmpl := template.New("stdin").Funcs(helmFuncMap()).Option("missingkey=error")
-	tmpl, err = tmpl.Parse(tmplContent)
+	tmplContent, data, err := processTemplate(string(tmplBytes), args)
 	if err != nil {
+		return err
+	}
+
+	missingKeyOpt := MISSINGKEY_ALLOW
+	switch os.Getenv(ENV_ALLOW_MISSING) {
+	case "", "0", "false":
+		missingKeyOpt = MISSINGKEY_ERROR
+	}
+
+	tmpl := template.New(TEMPLATE_NAME).Funcs(helmFuncMap()).Option(missingKeyOpt)
+	if tmpl, err = tmpl.Parse(tmplContent); err != nil {
 		return fmt.Errorf("error parsing template: %w", err)
 	}
 
-	// Now add the include function with access to the parsed template
 	tmpl.Funcs(template.FuncMap{
 		"include": func(name string, data any) (string, error) {
 			buf := new(bytes.Buffer)
@@ -145,6 +141,33 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	}
 
 	return nil
+}
+
+func processTemplate(template string, args []string) (string, map[string]any, error) {
+	tmplContent, embeddedDataBlocks := splitTemplateData(template)
+
+	var allDataMaps []map[string]any
+	var err error
+
+	if allDataMaps, err = collectDataFromEmbeddedBlocks(allDataMaps, embeddedDataBlocks); err != nil {
+		return "", nil, err
+	}
+
+	if allDataMaps, err = collectDataFromFiles(allDataMaps, args); err != nil {
+		return "", nil, err
+	}
+
+	var data map[string]any
+	if data, err = mergeAllDataMaps(allDataMaps); err != nil {
+		return "", nil, err
+	}
+
+	// If no data provided, use empty map (allows self-contained templates using only sprig functions)
+	if data == nil {
+		data = make(map[string]any)
+	}
+
+	return tmplContent, data, nil
 }
 
 func collectDataFromEmbeddedBlocks(allDataMaps []map[string]any, embeddedDataBlocks []string) ([]map[string]any, error) {
