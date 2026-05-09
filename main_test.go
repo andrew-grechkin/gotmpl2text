@@ -185,3 +185,66 @@ func TestRunMissingKeys(t *testing.T) {
 		})
 	}
 }
+
+func TestRunIgnoreEmbed(t *testing.T) {
+	tests := []struct {
+		name        string
+		template    string
+		ignoreEmbed string
+		want        string
+		wantErr     bool
+	}{
+		{
+			name:        "use embedded data (default)",
+			template:    "Hello {{ .name }}\n{{/* __DATA__\nname: world\n*/}}",
+			ignoreEmbed: "",
+			want:        "Hello world\n",
+			wantErr:     false,
+		},
+		{
+			name:        "ignore embedded data (env=1)",
+			template:    "Hello {{ .name }}\n{{/* __DATA__\nname: world\n*/}}",
+			ignoreEmbed: "1",
+			want:        "",
+			wantErr:     true, // Should fail because 'name' is now missing
+		},
+		{
+			name:        "ignore embedded data (env=true)",
+			template:    "Hello {{ .name }}\n{{/* __DATA__\nname: world\n*/}}",
+			ignoreEmbed: "true",
+			want:        "",
+			wantErr:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.ignoreEmbed != "" {
+				os.Setenv("GOTMPL_IGNORE_EMBED", tt.ignoreEmbed)
+			} else {
+				os.Unsetenv("GOTMPL_IGNORE_EMBED")
+			}
+			defer os.Unsetenv("GOTMPL_IGNORE_EMBED")
+
+			stdin := strings.NewReader(tt.template)
+			var stdout bytes.Buffer
+
+			err := run([]string{"gotmpl2text"}, stdin, &stdout)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("run() expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("run() failed: %v", err)
+			}
+
+			got := stdout.String()
+			if got != tt.want {
+				t.Errorf("run() got output %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

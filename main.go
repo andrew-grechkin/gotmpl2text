@@ -21,6 +21,7 @@ import (
 const (
 	TEMPLATE_NAME     = "STDIN"
 	ENV_ALLOW_MISSING = "GOTMPL_ALLOW_MISSING"
+	ENV_IGNORE_EMBED  = "GOTMPL_IGNORE_EMBED"
 	MISSINGKEY_ERROR  = "missingkey=error"
 	MISSINGKEY_ALLOW  = "missingkey=default"
 )
@@ -49,6 +50,7 @@ Options:
 
 Environment:
   GOTMPL_ALLOW_MISSING  Set to 1 to allow missing keys (renders <no value>)
+  GOTMPL_IGNORE_EMBED   Set to 1 to ignore embedded __DATA__ blocks
 
 Examples:
   gotmpl2text < template.tmpl base.yaml overrides.yaml
@@ -171,13 +173,17 @@ func processTemplate(template string, args []string) (string, map[string]any, er
 }
 
 func collectDataFromEmbeddedBlocks(allDataMaps []map[string]any, embeddedDataBlocks []string) ([]map[string]any, error) {
-	for i, block := range embeddedDataBlocks {
-		var blockData map[string]any
-		if err := yaml.Unmarshal([]byte(block), &blockData); err != nil {
-			return nil, fmt.Errorf("error parsing embedded YAML data block %d: %w", i+1, err)
+	switch os.Getenv(ENV_IGNORE_EMBED) {
+	case "", "0", "false":
+		for i, block := range embeddedDataBlocks {
+			var blockData map[string]any
+			if err := yaml.Unmarshal([]byte(block), &blockData); err != nil {
+				return nil, fmt.Errorf("error parsing embedded YAML data block %d: %w", i+1, err)
+			}
+			allDataMaps = append(allDataMaps, blockData)
 		}
-		allDataMaps = append(allDataMaps, blockData)
 	}
+
 	return allDataMaps, nil
 }
 

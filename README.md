@@ -41,6 +41,7 @@ EO_TEMPLATE
 ## ENVIRONMENT:
 
 * GOTMPL_ALLOW_MISSING=1: to allow missing keys (renders `<no value>`)
+* GOTMPL_IGNORE_EMBED=1:  to ignore embedded `__DATA__` blocks
 
 ## INSTALLATION
 
