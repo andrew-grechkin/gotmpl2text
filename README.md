@@ -34,14 +34,17 @@ EO_TEMPLATE
 
 ## OPTIONS
 
-* -h, --help        Display help message
-* -m, --man         Display full readme         (tip: gotmpl2text --man | colored-md)
-* -v, --version     Display version information (tip: gotmpl2text --version | jq -r .Version)
+- -h, --help Display help message
+- -m, --man Display full readme (tip: gotmpl2text --man | colored-md)
+- -v, --version Display version information (tip: gotmpl2text --version | jq -r .Version)
 
 ## ENVIRONMENT
 
-* GOTMPL_ALLOW_MISSING=1: to allow missing keys (renders `<no value>`)
-* GOTMPL_IGNORE_EMBED=1:  to ignore embedded `__DATA__` blocks
+- GOTMPL_ALLOW_MISSING=1: to allow missing keys (renders `<no value>`)
+- GOTMPL_IGNORE_EMBED=1: to ignore embedded `__DATA__` blocks
+- GOTMPL_FUNCTIONS: path to custom functions YAML file (see [Custom Functions](#custom-functions))
+- GOTMPL_PRELOAD: comma-separated list of template files to preload (see [Template Preloading](#template-preloading))
+- GOTMPL_DEBUG=1: enable debug mode (diagnostic output to stderr)
 
 ## INSTALLATION
 
@@ -84,16 +87,19 @@ gotmpl2text <<< 'Date: {{ now | date "2006-01-02" }}'
 ### Single data file
 
 Render with inline JSON data:
+
 ```bash
 gotmpl2text <<< '{{ .name }}: {{ .replicas }}' <(echo '{"name":"my-service","replicas":3}')
 ```
 
 Or with actual files:
+
 ```bash
 gotmpl2text < template.tmpl data.yaml
 ```
 
-[UUOC](https://en.wikipedia.org/wiki/Cat_(Unix)#Useless_use_of_cat), if one would like:
+Or [UUOC](<https://en.wikipedia.org/wiki/Cat_(Unix)#Useless_use_of_cat>), if one would like:
+
 ```bash
 cat template.tmpl | gotmpl2text data.yaml
 ```
@@ -108,6 +114,7 @@ gotmpl2text \
 ```
 
 Or with actual files:
+
 ```bash
 gotmpl2text < template.tmpl base.yaml override.yaml
 ```
@@ -182,38 +189,142 @@ EO_TEMPLATE
 The tool includes Helm template functions for compatibility with Helm charts and similar systems:
 
 **`include`** - Execute a template and return its output as a string (can be piped):
+
 ```bash
 gotmpl2text <<< '{{- define "helper" -}}Hello {{ .name }}{{- end -}}{{ include "helper" . | upper }}' <(echo '{"name":"world"}')
 ```
 
 **`required`** - Error if a value is missing or empty:
+
 ```bash
 gotmpl2text <<< '{{ required "name must be set" .name }}' <(echo '{"name":"test"}')
 gotmpl2text <<< '{{ required "name must be set" .name }}' <(echo '{"foo":"bar"}')
 ```
 
 **`toYaml`** - Convert a value to YAML string:
+
 ```bash
 gotmpl2text <<< 'config:{{ .config | toYaml | nindent 2 }}' <(echo '{"config":{"timeout":30,"debug":true}}')
 ```
 
 **`nindent`** - Add newline and indent:
+
 ```bash
 gotmpl2text <<< 'data:{{ .items | toYaml | nindent 2 }}' <(echo '{"items":["a","b","c"]}')
 ```
 
 **`indent`** - Indent without leading newline:
+
 ```bash
 gotmpl2text <<< '{{ .text | indent 4 }}' <(echo '{"text":"hello"}')
 ```
 
 Also available: `fromYaml` (parse YAML string)
 
+## TEMPLATE PRELOADING
+
+You can preload template files containing common `{{define}}` blocks via the `GOTMPL_PRELOAD` environment variable.
+This is useful when working with systems that store shared template definitions in separate files.
+
+```bash
+# Preload common definitions
+GOTMPL_PRELOAD="common.tmpl,helpers.tmpl" gotmpl2text < main.tmpl
+```
+
+**Behavior:**
+
+- Files are comma-separated and loaded in order
+- Preloaded content is concatenated before the STDIN template
+- Missing preload files cause an error with exit code 2
+
+**Example:**
+
+```bash
+# common.tmpl contains shared definitions
+cat > common.tmpl <<'EO_TEMPLATE'
+{{- define "app.name" -}}
+my-app
+{{- end -}}
+EO_TEMPLATE
+
+# main template uses the preloaded definitions
+GOTMPL_PRELOAD="common.tmpl" gotmpl2text <<'EO_TEMPLATE'
+Application: {{ include "app.name" . }}
+EO_TEMPLATE
+```
+
+Frankly speaking this is a syntax sugar.
+I personally use it for the case when I know some common definitions template must be included:
+it's easier to just export environment variable than passing full set of files each time.
+The same behavior can be achieved by using `cat`:
+
+```bash
+cat common.tmpl helpers.tmpl base.tmpl | gotmpl2text data.yaml
+```
+
+## CUSTOM FUNCTIONS
+
+You can define custom template functions using Sprig template syntax in a YAML file.
+
+**File location (in order of priority):**
+
+1. `$GOTMPL_FUNCTIONS` (if set)
+2. `$XDG_CONFIG_HOME/gotmpl2text/functions.yaml`
+3. `~/.config/gotmpl2text/functions.yaml`
+
+**Format:**
+
+```yaml
+---
+functions:
+  - name: myFunc
+    template: |-
+      {{- . | toString | upper -}}
+
+  - name: slugify
+    template: |-
+      {{- regexReplaceAll "[^a-z0-9]+" (. | toString | lower) "-" | trimSuffix "-" -}}
+```
+
+**Example usage:**
+
+```bash
+# Create custom functions file
+cat > ~/.config/gotmpl2text/functions.yaml <<'EO_FUNCTIONS'
+---
+functions:
+  - name: shout
+    template: |-
+      {{- . | toString | upper -}}
+EO_FUNCTIONS
+
+# Use the custom function
+gotmpl2text <<< '{{ "hello" | shout }}'
+# Output: HELLO
+```
+
+See [examples/functions.yaml](examples/functions.yaml) for more examples.
+
+## DEBUG MODE
+
+Enable debug mode to see diagnostic information about what `gotmpl2text` is doing:
+
+```bash
+GOTMPL_DEBUG=1 gotmpl2text <<< '{{ .text | indent 4 }}' <(echo '{"text":"hello"}')
+```
+
+## EXIT CODES
+
+- **0**: Success
+- **1**: Template errors, missing keys, parsing errors
+- **2**: Missing preload files (GOTMPL_PRELOAD)
+
 ## CI/CD INTEGRATION
 
 For example one can use `gotmpl2text` in CI pipelines to validate templates before deployment:
 
 **GitHub Actions:**
+
 ```yaml
 - name: Install gotmpl2text
   run: go install github.com/andrew-grechkin/gotmpl2text@latest
@@ -226,6 +337,7 @@ For example one can use `gotmpl2text` in CI pipelines to validate templates befo
 ```
 
 **GitLab CI:**
+
 ```yaml
 test:templates:
   script: |-
@@ -235,6 +347,7 @@ test:templates:
 ```
 
 **Pre-commit hook:**
+
 ```bash
 #!/usr/bin/env bash
 # .git/hooks/pre-commit

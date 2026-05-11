@@ -248,3 +248,222 @@ func TestRunIgnoreEmbed(t *testing.T) {
 		})
 	}
 }
+
+func TestCustomFunctions(t *testing.T) {
+	// Set GOTMPL_FUNCTIONS to point to our example functions.yaml
+	absPath, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+	functionsFile := absPath + "/examples/functions.yaml"
+
+	os.Setenv("GOTMPL_FUNCTIONS", functionsFile)
+	defer os.Unsetenv("GOTMPL_FUNCTIONS")
+
+	tests := []struct {
+		name     string
+		template string
+		want     string
+		wantErr  bool
+	}{
+		{
+			name:     "toHarnessId function",
+			template: `{{ "my-service_name" | toHarnessId }}`,
+			want:     "my_service__name",
+			wantErr:  false,
+		},
+		{
+			name:     "toHarnessId with complex input",
+			template: `{{ "foo-bar_baz@123" | toHarnessId }}`,
+			want:     "foo_bar__baz_123",
+			wantErr:  false,
+		},
+		{
+			name:     "shout function",
+			template: `{{ "hello world" | shout }}`,
+			want:     "HELLO WORLD",
+			wantErr:  false,
+		},
+		{
+			name:     "withPrefix function",
+			template: `{{ "myvalue" | withPrefix }}`,
+			want:     "prefix_myvalue",
+			wantErr:  false,
+		},
+		{
+			name:     "slugify function",
+			template: `{{ "Hello World! 123" | slugify }}`,
+			want:     "hello-world-123",
+			wantErr:  false,
+		},
+		{
+			name:     "multiple custom functions",
+			template: `{{ "test" | withPrefix | shout }}`,
+			want:     "PREFIX_TEST",
+			wantErr:  false,
+		},
+		{
+			name:     "custom function with embedded data",
+			template: "{{ .name | toHarnessId }}\n{{/* __DATA__\nname: my-app_v2\n*/}}",
+			want:     "my_app__v2\n",
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stdin := strings.NewReader(tt.template)
+			var stdout bytes.Buffer
+
+			err := run([]string{"gotmpl2text"}, stdin, &stdout)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("run() expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("run() failed: %v", err)
+			}
+
+			got := stdout.String()
+			if got != tt.want {
+				t.Errorf("run() got output %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCustomFunctionsNotFound(t *testing.T) {
+	// Set XDG_CONFIG_HOME to a non-existent directory
+	os.Setenv("XDG_CONFIG_HOME", "/tmp/nonexistent-gotmpl2text-test")
+	defer os.Unsetenv("XDG_CONFIG_HOME")
+
+	// Should work fine without custom functions file
+	stdin := strings.NewReader(`{{ "test" | upper }}`)
+	var stdout bytes.Buffer
+
+	err := run([]string{"gotmpl2text"}, stdin, &stdout)
+	if err != nil {
+		t.Fatalf("run() failed when custom functions file doesn't exist: %v", err)
+	}
+
+	got := stdout.String()
+	want := "TEST"
+	if got != want {
+		t.Errorf("run() got output %q, want %q", got, want)
+	}
+}
+
+func TestPreloadTemplates(t *testing.T) {
+	absPath, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+
+	helpersFile := absPath + "/test/fixtures/helpers.tmpl"
+	commonFile := absPath + "/test/fixtures/common.tmpl"
+
+	tests := []struct {
+		name     string
+		preload  string
+		template string
+		want     string
+		wantErr  bool
+	}{
+		{
+			name:     "single preload file",
+			preload:  helpersFile,
+			template: `{{ include "greeting" "World" }}`,
+			want:     "Hello, World!",
+			wantErr:  false,
+		},
+		{
+			name:     "multiple preload files",
+			preload:  helpersFile + "," + commonFile,
+			template: `{{ include "greeting" "Test" }} {{ include "banner" "Title" }}`,
+			want: `Hello, Test! =================================
+Title
+=================================`,
+			wantErr: false,
+		},
+		{
+			name:     "preload with spaces in list",
+			preload:  helpersFile + " , " + commonFile,
+			template: `{{ include "upper" "hello" }}`,
+			want:     "HELLO",
+			wantErr:  false,
+		},
+		{
+			name:     "preload with embedded data",
+			preload:  helpersFile,
+			template: "{{ include \"greeting\" .name }}\n{{/* __DATA__\nname: Alice\n*/}}",
+			want:     "Hello, Alice!\n",
+			wantErr:  false,
+		},
+		{
+			name:     "no preload",
+			preload:  "",
+			template: `{{ "test" | upper }}`,
+			want:     "TEST",
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.preload != "" {
+				os.Setenv("GOTMPL_PRELOAD", tt.preload)
+			} else {
+				os.Unsetenv("GOTMPL_PRELOAD")
+			}
+			defer os.Unsetenv("GOTMPL_PRELOAD")
+
+			stdin := strings.NewReader(tt.template)
+			var stdout bytes.Buffer
+
+			err := run([]string{"gotmpl2text"}, stdin, &stdout)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("run() expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("run() failed: %v", err)
+			}
+
+			got := stdout.String()
+			if got != tt.want {
+				t.Errorf("run() got output %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPreloadTemplatesFileNotFound(t *testing.T) {
+	os.Setenv("GOTMPL_PRELOAD", "/nonexistent/file.tmpl")
+	defer os.Unsetenv("GOTMPL_PRELOAD")
+
+	stdin := strings.NewReader(`{{ "test" }}`)
+	var stdout bytes.Buffer
+
+	err := run([]string{"gotmpl2text"}, stdin, &stdout)
+	if err == nil {
+		t.Errorf("run() expected error when preload file doesn't exist, but got none")
+		return
+	}
+
+	// Verify it's a PreloadError
+	var preloadErr *PreloadError
+	if !reflect.TypeOf(err).ConvertibleTo(reflect.TypeOf(preloadErr)) {
+		t.Errorf("run() expected PreloadError, got %T", err)
+	}
+
+	// Verify error message contains the file name
+	if !strings.Contains(err.Error(), "/nonexistent/file.tmpl") {
+		t.Errorf("run() error message should contain file name, got: %v", err)
+	}
+}

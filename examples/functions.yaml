@@ -1,0 +1,31 @@
+---
+functions:
+  # toHarnessId: Convert strings to Harness.io compatible identifiers
+  # Escapes underscores and replaces special characters with underscores
+  # Example: GOTMPL_FUNCTIONS=examples/functions.yaml gotmpl2text <<< '{{ "my-service_name" | toHarnessId }}'
+  # Output: my_service__name
+  - name: toHarnessId
+    template: |-
+      {{- regexReplaceAll "[^a-zA-Z0-9_]" (. | toString | replace "_" "__") "_" -}}
+
+  # shout: Convert string to uppercase
+  # Example: GOTMPL_FUNCTIONS=examples/functions.yaml gotmpl2text <<< '{{ "hello world" | shout }}'
+  # Output: HELLO WORLD
+  - name: shout
+    template: |-
+      {{- . | toString | upper -}}
+
+  # withPrefix: Add "prefix_" to the beginning of a string
+  # Example: GOTMPL_FUNCTIONS=examples/functions.yaml gotmpl2text <<< '{{ "myvalue" | withPrefix }}'
+  # Output: prefix_myvalue
+  - name: withPrefix
+    template: |-
+      {{- printf "prefix_%s" (. | toString) -}}
+
+  # slugify: Convert string to lowercase slug (suitable for URLs/filenames)
+  # Replaces non-alphanumeric characters with dashes
+  # Example: GOTMPL_FUNCTIONS=examples/functions.yaml gotmpl2text <<< '{{ "Hello World! 123" | slugify }}'
+  # Output: hello-world-123
+  - name: slugify
+    template: |-
+      {{- regexReplaceAll "[^a-z0-9]+" (. | toString | lower) "-" | trimSuffix "-" -}}
