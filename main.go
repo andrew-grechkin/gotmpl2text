@@ -39,69 +39,8 @@ const (
 	MISSINGKEY_ALLOW  = "missingkey=default"
 )
 
-const gnuHelpText = `Usage: gotmpl2text [OPTIONS] [FILE...]
-
-A CLI filter for testing and rendering Go templates with YAML/JSON data.
-
-Reads template from STDIN, outputs rendered result to STDOUT.
-
-Data can be provided via:
-  - Embedded in template as {{/* __DATA__ ... */}} comment block(s) (optional)
-  - Command-line arguments (YAML/JSON files, optional)
-  - Both combined
-  - No data at all (for self-contained templates using Sprig functions)
-
-Multiple data sources are merged in order:
-  1. Embedded blocks are merged first (top-to-bottom, later overrides earlier)
-  2. Data files are merged on top (left-to-right, files always override embedded data)
-This matches Helm's behavior: gotmpl2text base.yaml override.yaml
-
-Options:
-  -h, --help        Display help message
-  -m, --man         Display full readme         (tip: gotmpl2text --man | colored-md)
-  -v, --version     Display version information (tip: gotmpl2text --version | jq -r .Version)
-
-Environment:
-  GOTMPL_ALLOW_MISSING  Set to 1 to allow missing keys (renders <no value>)
-  GOTMPL_IGNORE_EMBED   Set to 1 to ignore embedded __DATA__ blocks
-  GOTMPL_FUNCTIONS      Path to custom functions YAML file
-  GOTMPL_PRELOAD        Comma-separated list of template files to preload
-  GOTMPL_DEBUG          Set to 1 to enable debug mode (diagnostic output to stderr)
-
-Template Preloading:
-  You can preload template files (e.g., common definitions) via GOTMPL_PRELOAD.
-  Files are loaded in order and concatenated before the STDIN template.
-  Missing preload files will cause an error (exit code 2).
-
-  Example:
-    GOTMPL_PRELOAD="common.tmpl,helpers.tmpl" gotmpl2text < main.tmpl
-
-Custom Functions:
-  You can define custom template functions in a YAML file.
-  File location (in order of priority):
-    1. $GOTMPL_FUNCTIONS (if set)
-    2. $XDG_CONFIG_HOME/gotmpl2text/functions.yaml
-    3. ~/.config/gotmpl2text/functions.yaml
-
-  Format (see examples/functions.yaml):
-    functions:
-      - name: myFunc
-        template: |
-          {{- . | toString | upper -}}
-
-Examples:
-  gotmpl2text < template.tmpl base.yaml overrides.yaml
-
-  gotmpl2text <<< '{{ .name }}' <(echo '{"name":"test"}')
-
-  gotmpl2text <<'EO_TEMPLATE'
-Hello {{ .name }}!
-
-{{/* __DATA__
-name: world
-*/}}
-EO_TEMPLATE
-`
+//go:embed help.txt
+var gnuHelpText []byte
 
 //go:embed README.md
 var readmeContent []byte
@@ -122,7 +61,7 @@ func printVersion(out io.Writer) error {
 }
 
 func printHelp(out io.Writer) error {
-	fmt.Fprint(out, gnuHelpText)
+	fmt.Fprint(out, string(gnuHelpText))
 	return nil
 }
 

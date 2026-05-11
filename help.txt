@@ -1,0 +1,22 @@
+Usage: gotmpl2text [OPTIONS] [FILE...]
+
+A CLI filter for testing and rendering Go templates with YAML/JSON data.
+
+Reads template from STDIN, outputs rendered result to STDOUT.
+
+Options:
+  -h, --help        Display help message
+  -m, --man         Display full readme         (tip: gotmpl2text --man | colored-md)
+  -v, --version     Display version information (tip: gotmpl2text --version | jq -r .Version)
+
+Environment:
+  GOTMPL_ALLOW_MISSING  Set to 1 to allow missing keys (renders <no value>)
+  GOTMPL_IGNORE_EMBED   Set to 1 to ignore embedded __DATA__ blocks
+  GOTMPL_FUNCTIONS      Path to custom functions YAML file
+  GOTMPL_PRELOAD        Comma-separated list of template files to preload
+  GOTMPL_DEBUG          Set to 1 to enable debug mode (diagnostic output to stderr)
+
+Examples:
+  gotmpl2text < template.tmpl base.yaml overrides.yaml
+
+  gotmpl2text <<< '{{ .name }}' <(echo '{"name":"test"}')
