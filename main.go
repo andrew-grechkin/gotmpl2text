@@ -44,7 +44,7 @@ Multiple data sources are merged in order:
 This matches Helm's behavior: gotmpl2text base.yaml override.yaml
 
 Options:
-  -h, --help        Display this help message
+  -h, --help        Display help message
   -m, --man         Display full readme         (tip: gotmpl2text --man | colored-md)
   -v, --version     Display version information (tip: gotmpl2text --version | jq -r .Version)
 

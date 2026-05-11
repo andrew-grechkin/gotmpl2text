@@ -14,10 +14,10 @@ editor.
 
 `gotmpl2text` is just a simple CLI filter and embedding it in any workflow is a piece of cake.
 
-## SYNOPSIS:
+## SYNOPSIS
 
 ```bash
-# template from STDIN, data as files
+# template from STDIN, data as file(s)
 gotmpl2text <<< '{{ .name }}: {{ .replicas }}' <(echo '{"name":"api","replicas":3}')
 ```
 
@@ -32,13 +32,13 @@ name: api
 EO_TEMPLATE
 ```
 
-## OPTIONS:
+## OPTIONS
 
-* -h, --help        Show help
-* -m, --man         Show full manual (this README)
-* -v, --version     Show version
+* -h, --help        Display help message
+* -m, --man         Display full readme         (tip: gotmpl2text --man | colored-md)
+* -v, --version     Display version information (tip: gotmpl2text --version | jq -r .Version)
 
-## ENVIRONMENT:
+## ENVIRONMENT
 
 * GOTMPL_ALLOW_MISSING=1: to allow missing keys (renders `<no value>`)
 * GOTMPL_IGNORE_EMBED=1:  to ignore embedded `__DATA__` blocks
@@ -57,10 +57,9 @@ go install github.com/andrew-grechkin/gotmpl2text@latest
 - Loads data from one or more YAML/JSON files
 - Deep merges multiple data files (like Helm) - later files override earlier ones
 - Embedded data support - include YAML data in template with `{{/* __DATA__ ... */}}` comment
-- Includes [Sprig](http://masterminds.github.io/sprig/) template functions (100+ functions)
+- Includes [Sprig](http://masterminds.github.io/sprig/) template functions
 - Includes Helm-specific functions: `include`, `required`, `toYaml`, `fromYaml`, `nindent`, `indent`
 - Fails safely on missing variables (`missingkey=error` is enabled by default)
-- Proper error handling and exit codes
 
 ### Use Cases
 
@@ -91,6 +90,11 @@ gotmpl2text <<< '{{ .name }}: {{ .replicas }}' <(echo '{"name":"my-service","rep
 
 Or with actual files:
 ```bash
+gotmpl2text < template.tmpl data.yaml
+```
+
+[UUOC](https://en.wikipedia.org/wiki/Cat_(Unix)#Useless_use_of_cat), if one would like:
+```bash
 cat template.tmpl | gotmpl2text data.yaml
 ```
 
@@ -105,7 +109,7 @@ gotmpl2text \
 
 Or with actual files:
 ```bash
-gotmpl2text base.yaml override.yaml < template.tmpl
+gotmpl2text < template.tmpl base.yaml override.yaml
 ```
 
 Later files override earlier ones (just like with `helm install -f base.yaml -f override.yaml`).
@@ -149,11 +153,11 @@ EO_TEMPLATE
 ```
 
 **Combining embedded data with file arguments**.
-Merge order: embedded blocks (top-to-bottom) -> data files (left-to-right). Files always override embedded data:
+Merge order: embedded blocks (top-to-bottom) -> data files (left-to-right):
 
 ```bash
 # Embedded data acts as defaults, data in files override that
-gotmpl2text <(echo '{"env":"prod","replicas":10}') << 'EO_TEMPLATE'
+gotmpl2text << 'EO_TEMPLATE' <(echo '{"env":"prod","replicas":10}')
 {{ .name }}: replicas={{ .replicas }}, env={{ .env }}
 
 {{/* __DATA__
