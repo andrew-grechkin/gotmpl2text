@@ -1,0 +1,25 @@
+---
+functions:
+  - name: toUpperStr
+    type: string
+    template: |-
+      {{- . | toString | upper -}}
+
+  - name: toLowerStr
+    template: |-
+      {{- . | toString | lower -}}
+
+  - name: getLength
+    type: int64
+    template: |-
+      {{- . | toString | len -}}
+
+  - name: isLong
+    type: bool
+    template: |-
+      {{- gt (. | toString | len) 5 -}}
+
+  - name: halfValue
+    type: float64
+    template: |-
+      {{- divf . 2.0 -}}

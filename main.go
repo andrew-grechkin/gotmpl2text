@@ -89,65 +89,16 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	}
 
 	verbose := os.Getenv(ENV_DEBUG) == "1"
-	if verbose {
-		fmt.Fprintln(os.Stderr, "[debug] gotmpl2text starting")
-	}
 
-	tmplBytes, err := io.ReadAll(stdin)
-	if err != nil {
-		return fmt.Errorf("error reading template from STDIN: %w", err)
-	}
-
-	if verbose {
-		fmt.Fprintf(os.Stderr, "[debug] Read %d bytes from STDIN\n", len(tmplBytes))
-	}
-
-	preloadedContent, err := loadPreloadTemplates(verbose)
+	tmplContent, data, err := prepareTemplateAndData(stdin, args, verbose)
 	if err != nil {
 		return err
 	}
 
-	fullTemplate := preloadedContent + string(tmplBytes)
-
-	tmplContent, data, err := processTemplate(fullTemplate, args)
+	tmpl, err := buildTemplate(tmplContent, verbose)
 	if err != nil {
 		return err
 	}
-
-	if verbose {
-		dataCount := len(args) - 1
-		if dataCount > 0 {
-			fmt.Fprintf(os.Stderr, "[debug] Loaded %d data file(s)\n", dataCount)
-		}
-	}
-
-	missingKeyOpt := MISSINGKEY_ALLOW
-	switch os.Getenv(ENV_ALLOW_MISSING) {
-	case "", "0", "false":
-		missingKeyOpt = MISSINGKEY_ERROR
-	}
-
-	funcMap := helmFuncMap()
-
-	// Load custom functions from XDG config
-	if customFuncs, err := loadCustomFunctions(verbose); err != nil {
-		return fmt.Errorf("error loading custom functions: %w", err)
-	} else if customFuncs != nil {
-		maps.Copy(funcMap, customFuncs)
-	}
-
-	tmpl := template.New(TEMPLATE_NAME).Funcs(funcMap).Option(missingKeyOpt)
-	if tmpl, err = tmpl.Parse(tmplContent); err != nil {
-		return fmt.Errorf("error parsing template: %w", err)
-	}
-
-	tmpl.Funcs(template.FuncMap{
-		"include": func(name string, data any) (string, error) {
-			buf := new(bytes.Buffer)
-			err := tmpl.ExecuteTemplate(buf, name, data)
-			return buf.String(), err
-		},
-	})
 
 	if err := tmpl.Execute(stdout, data); err != nil {
 		return err
@@ -261,6 +212,21 @@ func splitTemplateData(content string) (string, []string) {
 	return tmplText, dataBlocks
 }
 
+// indentLines adds padding to non-empty lines in a string
+func indentLines(spaces int, v string) string {
+	padding := strings.Repeat(" ", spaces)
+	lines := strings.Split(v, "\n")
+	var result []string
+	for _, line := range lines {
+		if line != "" {
+			result = append(result, padding+line)
+		} else {
+			result = append(result, line)
+		}
+	}
+	return strings.Join(result, "\n")
+}
+
 // helmFuncMap returns a FuncMap with Sprig functions plus Helm-specific functions
 func helmFuncMap() template.FuncMap {
 	funcMap := sprig.TxtFuncMap()
@@ -300,47 +266,18 @@ func helmFuncMap() template.FuncMap {
 		},
 
 		"nindent": func(spaces int, v string) string {
-			padding := strings.Repeat(" ", spaces)
-			lines := strings.Split(v, "\n")
-			var result []string
-			for _, line := range lines {
-				if line != "" {
-					result = append(result, padding+line)
-				} else {
-					result = append(result, line)
-				}
-			}
-			return "\n" + strings.Join(result, "\n")
+			return "\n" + indentLines(spaces, v)
 		},
 
 		"indent": func(spaces int, v string) string {
-			padding := strings.Repeat(" ", spaces)
-			lines := strings.Split(v, "\n")
-			var result []string
-			for _, line := range lines {
-				if line != "" {
-					result = append(result, padding+line)
-				} else {
-					result = append(result, line)
-				}
-			}
-			return strings.Join(result, "\n")
+			return indentLines(spaces, v)
 		},
 	}
 
 	maps.Copy(funcMap, helmFuncs)
+	maps.Copy(funcMap, additionalFuncMap())
 
 	return funcMap
-}
-
-// customFuncDef represents a custom function definition from YAML
-type customFuncDef struct {
-	Name     string `yaml:"name"`
-	Template string `yaml:"template"`
-}
-
-type customFuncsConfig struct {
-	Functions []customFuncDef `yaml:"functions"`
 }
 
 // loadPreloadTemplates loads template files specified in GOTMPL_PRELOAD
@@ -384,68 +321,79 @@ func loadPreloadTemplates(verbose bool) (string, error) {
 	return result.String(), nil
 }
 
-// getCustomFunctionsPath returns the path to custom functions file
-// Priority: GOTMPL_FUNCTIONS env -> XDG_CONFIG_HOME -> ~/.config
-func getCustomFunctionsPath() string {
-	if funcFile := os.Getenv(ENV_FUNCTIONS); funcFile != "" {
-		return funcFile
+// prepareTemplateAndData reads stdin, loads preload files, processes template and merges data
+func prepareTemplateAndData(stdin io.Reader, args []string, verbose bool) (string, map[string]any, error) {
+	if verbose {
+		fmt.Fprintln(os.Stderr, "[debug] gotmpl2text starting")
 	}
 
-	if configHome := os.Getenv("XDG_CONFIG_HOME"); configHome != "" {
-		return configHome + "/gotmpl2text/functions.yaml"
-	}
-
-	if home := os.Getenv("HOME"); home != "" {
-		return home + "/.config/gotmpl2text/functions.yaml"
-	}
-
-	return ""
-}
-
-// loadCustomFunctions loads custom function definitions from config file
-func loadCustomFunctions(verbose bool) (template.FuncMap, error) {
-	funcFile := getCustomFunctionsPath()
-	if funcFile == "" {
-		return nil, nil // No config path available
-	}
-
-	data, err := os.ReadFile(funcFile)
+	tmplBytes, err := io.ReadAll(stdin)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil // No custom functions file, not an error
-		}
-		return nil, fmt.Errorf("error reading custom functions file: %w", err)
+		return "", nil, fmt.Errorf("error reading template from STDIN: %w", err)
 	}
 
 	if verbose {
-		fmt.Fprintf(os.Stderr, "[debug] Loading custom functions from: %s\n", funcFile)
+		fmt.Fprintf(os.Stderr, "[debug] Read %d bytes from STDIN\n", len(tmplBytes))
 	}
 
-	var config customFuncsConfig
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("error parsing custom functions YAML: %w", err)
+	preloadedContent, err := loadPreloadTemplates(verbose)
+	if err != nil {
+		return "", nil, err
 	}
 
-	customFuncs := make(template.FuncMap)
-	for _, fn := range config.Functions {
-		funcDef := fn
-		if verbose {
-			fmt.Fprintf(os.Stderr, "[debug]   - %s\n", funcDef.Name)
-		}
-		customFuncs[funcDef.Name] = func(v any) (string, error) {
-			// Create a new template with Sprig functions
-			tmpl := template.New("custom_" + funcDef.Name).Funcs(sprig.TxtFuncMap())
-			if tmpl, err := tmpl.Parse(funcDef.Template); err != nil {
-				return "", fmt.Errorf("error parsing custom function template %s: %w", funcDef.Name, err)
-			} else {
-				buf := new(bytes.Buffer)
-				if err := tmpl.Execute(buf, v); err != nil {
-					return "", fmt.Errorf("error executing custom function %s: %w", funcDef.Name, err)
-				}
-				return buf.String(), nil
-			}
+	fullTemplate := preloadedContent + string(tmplBytes)
+
+	tmplContent, data, err := processTemplate(fullTemplate, args)
+	if err != nil {
+		return "", nil, err
+	}
+
+	if verbose {
+		dataCount := len(args) - 1
+		if dataCount > 0 {
+			fmt.Fprintf(os.Stderr, "[debug] Loaded %d data file(s)\n", dataCount)
 		}
 	}
 
-	return customFuncs, nil
+	return tmplContent, data, nil
+}
+
+// getMissingKeyOption returns the template missingkey option based on environment variable
+func getMissingKeyOption() string {
+	switch os.Getenv(ENV_ALLOW_MISSING) {
+	case "", "0", "false":
+		return MISSINGKEY_ERROR
+	default:
+		return MISSINGKEY_ALLOW
+	}
+}
+
+// buildTemplate builds and parses the template with all function maps
+func buildTemplate(tmplContent string, verbose bool) (*template.Template, error) {
+	missingKeyOpt := getMissingKeyOption()
+	funcMap := helmFuncMap()
+
+	// Load custom functions from XDG config
+	if customFuncs, err := loadCustomFunctions(funcMap, verbose); err != nil {
+		return nil, fmt.Errorf("error loading custom functions: %w", err)
+	} else if customFuncs != nil {
+		maps.Copy(funcMap, customFuncs)
+	}
+
+	tmpl := template.New(TEMPLATE_NAME).Funcs(funcMap).Option(missingKeyOpt)
+	var err error
+	if tmpl, err = tmpl.Parse(tmplContent); err != nil {
+		return nil, fmt.Errorf("error parsing template: %w", err)
+	}
+
+	// Add include function that needs the parsed template
+	tmpl.Funcs(template.FuncMap{
+		"include": func(name string, data any) (string, error) {
+			buf := new(bytes.Buffer)
+			err := tmpl.ExecuteTemplate(buf, name, data)
+			return buf.String(), err
+		},
+	})
+
+	return tmpl, nil
 }

@@ -80,7 +80,7 @@ go install github.com/andrew-grechkin/gotmpl2text@latest
 ```bash
 # Templates can use Sprig functions without any data:
 gotmpl2text <<< 'Random: {{ randAlpha 10 }}'
-gotmpl2text <<< 'UUID: {{ uuidv4 }}'
+gotmpl2text <<< 'UUID v4: {{ uuidv4 }}'
 gotmpl2text <<< 'Date: {{ now | date "2006-01-02" }}'
 ```
 
@@ -221,6 +221,36 @@ gotmpl2text <<< '{{ .text | indent 4 }}' <(echo '{"text":"hello"}')
 
 Also available: `fromYaml` (parse YAML string)
 
+### Additional functions
+
+Beyond Sprig and Helm functions, `gotmpl2text` provides:
+
+**`uuidv7`** - Generate time-ordered UUID v7:
+
+```bash
+gotmpl2text <<< 'UUID: {{ uuidv7 }}'
+# Output: UUID: 019e20a9-1a2b-777f-8dd3-e407ba1c5e06
+```
+
+**`uuidv7ToEpochNs`** - Extract Unix epoch nanoseconds from UUID v7:
+
+```bash
+gotmpl2text <<< '{{ $uuid := uuidv7 }}{{ $uuid | uuidv7ToEpochNs }}'
+# Output: 1778664413739000000
+```
+
+**Note:** Returns nanoseconds as int64, which limits the range to ~292 years from Unix epoch (until year ~2262).
+For dates beyond this range, use `uuidv7ToEpoch`.
+
+**`uuidv7ToEpoch`** - Extract Unix epoch seconds from UUID v7:
+
+```bash
+gotmpl2text <<< '{{ uuidv7 | uuidv7ToEpoch }}'
+# Output: 1778664413
+```
+
+These functions are useful for generating time-sortable identifiers and extracting timestamps from UUID v7 values.
+
 ## TEMPLATE PRELOADING
 
 You can preload template files containing common `{{define}}` blocks via the `GOTMPL_PRELOAD` environment variable.
@@ -276,11 +306,11 @@ You can define custom template functions using Sprig template syntax in a YAML f
 
 ```yaml
 ---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/andrew-grechkin/gotmpl2text/main/schemas/functions.yaml
 functions:
   - name: myFunc
     template: |-
       {{- . | toString | upper -}}
-
   - name: slugify
     template: |-
       {{- regexReplaceAll "[^a-z0-9]+" (. | toString | lower) "-" | trimSuffix "-" -}}
@@ -304,6 +334,22 @@ gotmpl2text <<< '{{ "hello" | shout }}'
 ```
 
 See [examples/functions.yaml](examples/functions.yaml) for more examples.
+
+**IDE Support:** A [JSON Schema](schemas/functions.yaml) is provided for IDE autocomplete and validation.
+Add this line to the top of your `functions.yaml`:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/andrew-grechkin/gotmpl2text/main/schemas/functions.yaml
+```
+
+### Typed Custom Functions
+
+Custom functions can specify their return type using the `type:` field. Supported types match Sprig conventions:
+
+- `string` (default) - text values, preserves whitespace
+- `int64` - integers for arithmetic (matches Sprig `add`, `div`, etc.)
+- `float64` - floating-point numbers
+- `bool` - boolean values for conditionals
 
 ## DEBUG MODE
 

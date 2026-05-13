@@ -30,6 +30,9 @@ test: build test-unit
     #!/usr/bin/env bash
     set -Eeuo pipefail
 
+    # Unset environment variables that could interfere with tests
+    unset GOTMPL_PRELOAD GOTMPL_FUNCTIONS || true
+
     for f in test/fixtures/*-expected.txt; do
         name=$(basename "$f" -expected.txt)
 

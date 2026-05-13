@@ -1,0 +1,6 @@
+---
+functions:
+  - name: toInt
+    type: int64
+    template: |-
+      {{- . -}}

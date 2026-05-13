@@ -1,0 +1,6 @@
+---
+functions:
+  - name: toBool
+    type: bool
+    template: |-
+      {{- . -}}
