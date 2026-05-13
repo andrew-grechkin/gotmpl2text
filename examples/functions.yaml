@@ -1,4 +1,6 @@
 ---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/andrew-grechkin/gotmpl2text/main/schemas/functions.yaml
+
 functions:
   # toHarnessId: Convert strings to Harness.io compatible identifiers
   # Escapes underscores and replaces special characters with underscores
@@ -29,3 +31,25 @@ functions:
   - name: slugify
     template: |-
       {{- regexReplaceAll "[^a-z0-9]+" (. | toString | lower) "-" | trimSuffix "-" -}}
+
+  # uuidv7ToEpochMs: Extract Unix epoch milliseconds from UUID v7
+  # Example: GOTMPL_FUNCTIONS=examples/functions.yaml gotmpl2text <<< '{{ uuidv7 | uuidv7ToEpochMs }}'
+  # Output: 1778594190123
+  - name: uuidv7ToEpochMs
+    type: int64
+    template: |-
+      {{- div (. | toString | uuidv7ToEpochNs) 1000000 -}}
+
+  # toRFC3339: Convert Unix epoch (seconds) to RFC3339 format with space separator, always UTC
+  # Example: GOTMPL_FUNCTIONS=examples/functions.yaml gotmpl2text <<< '{{ 1715616000 | toRFC3339 }}'
+  # Output: 2024-05-13 18:00:00Z
+  - name: toRFC3339
+    template: |-
+      {{- date "2006-01-02 15:04:05Z" . -}}
+
+  # toISO8601: Convert Unix epoch (seconds) to ISO8601 format with T separator, always UTC
+  # Example: GOTMPL_FUNCTIONS=examples/functions.yaml gotmpl2text <<< '{{ 1715616000 | toISO8601 }}'
+  # Output: 2024-05-13T18:00:00Z
+  - name: toISO8601
+    template: |-
+      {{- date "2006-01-02T15:04:05Z" . -}}

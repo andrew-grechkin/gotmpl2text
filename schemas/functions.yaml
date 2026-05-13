@@ -1,0 +1,42 @@
+---
+$id: https://raw.githubusercontent.com/andrew-grechkin/gotmpl2text/main/schemas/functions.yaml
+$schema: http://json-schema.org/draft-07/schema#
+additionalProperties: false
+description: Schema for gotmpl2text custom template functions configuration
+
+properties:
+  functions:
+    description: Array of custom template function definitions
+    items:
+      additionalProperties: false
+      properties:
+        name:
+          description: Name of the custom function
+          minLength: 1
+          pattern: ^[a-zA-Z][a-zA-Z0-9_]*$
+          type: string
+        template:
+          description: Go template code that defines the function behavior. The template receives input via '.' and should
+            produce the output.
+          minLength: 1
+          type: string
+        type:
+          default: string
+          description: Return type of the function. Defaults to 'string' if not specified.
+          enum:
+            - string
+            - int64
+            - float64
+            - bool
+          type: string
+      required:
+        - name
+        - template
+      type: object
+    type: array
+
+required:
+  - functions
+
+title: gotmpl2text Custom Functions
+type: object
