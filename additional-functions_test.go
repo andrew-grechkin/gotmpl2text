@@ -137,3 +137,41 @@ func TestUUIDv7DerivedFunctions(t *testing.T) {
 		})
 	}
 }
+
+func TestJsonFunctions(t *testing.T) {
+	tests := []struct {
+		name     string
+		template string
+		want     string
+	}{
+		{
+			name: "toJson simple",
+			template: `{{ . | toJson -}}{{/* __DATA__
+a: b
+*/}}`,
+			want: `{"a":"b"}`,
+		},
+		{
+			name:     "toJson and fromYaml combined",
+			template: `{{ "{\"x\":1}" | fromYaml | toJson }}`,
+			want:     `{"x":1}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stdin := strings.NewReader(tt.template)
+			var stdout bytes.Buffer
+
+			err := run([]string{"gotmpl2text"}, stdin, &stdout)
+			if err != nil {
+				t.Fatalf("run() failed: %v", err)
+			}
+
+			got := stdout.String()
+			if got != tt.want {
+				t.Errorf("run() got output %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
