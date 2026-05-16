@@ -48,23 +48,30 @@ EO_TEMPLATE
 
 ## INSTALLATION
 
-To install `gotmpl2text`:
-
 ```bash
 go install github.com/andrew-grechkin/gotmpl2text@latest
+```
+
+By default, `go install` creates binaries in `$GOBIN` or `$GOPATH/bin`.
+To make sure you can use the installed binary you need to add this directory to your path.
+
+```bash
+# ensure the go install binaries are in your PATH, consider adding to your shell startup config
+export PATH="${GOBIN:-${GOPATH:-$HOME/go}/bin}:$PATH"
 ```
 
 ## FEATURES
 
 - Renders Go templates to STDOUT
 - Loads data from one or more YAML/JSON files
+- Fails safely on missing variables (`missingkey=error` is enabled by default)
 - Deep merges multiple data files (like Helm) - later files override earlier ones
 - Embedded data support - include YAML data in template with `{{/* __DATA__ ... */}}` comment
 - Includes [Sprig](http://masterminds.github.io/sprig/) template functions
 - Includes Helm-specific functions: `include`, `required`, `toYaml`, `fromYaml`, `nindent`, `indent`
-- Fails safely on missing variables (`missingkey=error` is enabled by default)
+- Extra functions: `toJson`, `uuidv7`, `uuidv7ToEpoch`, `uuidv7ToEpochNs`
 
-### Use Cases
+### Use cases
 
 - **Helm chart development** - test value overrides and template logic
 - **Kubernetes manifest generation** - render templates with different configs
@@ -95,13 +102,13 @@ gotmpl2text <<< '{{ .name }}: {{ .replicas }}' <(echo '{"name":"my-service","rep
 Or with actual files:
 
 ```bash
-gotmpl2text < template.tmpl data.yaml
+gotmpl2text < template.tmpl data.yaml override.json
 ```
 
 Or [UUOC](<https://en.wikipedia.org/wiki/Cat_(Unix)#Useless_use_of_cat>), if one would like:
 
 ```bash
-cat template.tmpl | gotmpl2text data.yaml
+cat template.tmpl | gotmpl2text data.yaml override.json
 ```
 
 ### Multiple data files with deep merge
@@ -225,18 +232,22 @@ Also available: `fromYaml` (parse YAML string)
 
 Beyond Sprig and Helm functions, `gotmpl2text` provides:
 
+**`toJson`** - Convert a value to JSON string:
+
+```bash
+gotmpl2text <<< '{{ . | toJson }}' <(echo $'hash:\n  key: value')
+```
+
 **`uuidv7`** - Generate time-ordered UUID v7:
 
 ```bash
 gotmpl2text <<< 'UUID: {{ uuidv7 }}'
-# Output: UUID: 019e20a9-1a2b-777f-8dd3-e407ba1c5e06
 ```
 
 **`uuidv7ToEpochNs`** - Extract Unix epoch nanoseconds from UUID v7:
 
 ```bash
 gotmpl2text <<< '{{ $uuid := uuidv7 }}{{ $uuid | uuidv7ToEpochNs }}'
-# Output: 1778664413739000000
 ```
 
 **Note:** Returns nanoseconds as int64, which limits the range to ~292 years from Unix epoch (until year ~2262).
@@ -246,53 +257,9 @@ For dates beyond this range, use `uuidv7ToEpoch`.
 
 ```bash
 gotmpl2text <<< '{{ uuidv7 | uuidv7ToEpoch }}'
-# Output: 1778664413
 ```
 
-These functions are useful for generating time-sortable identifiers and extracting timestamps from UUID v7 values.
-
-## TEMPLATE PRELOADING
-
-You can preload template files containing common `{{define}}` blocks via the `GOTMPL_PRELOAD` environment variable.
-This is useful when working with systems that store shared template definitions in separate files.
-
-```bash
-# Preload common definitions
-GOTMPL_PRELOAD="common.tmpl,helpers.tmpl" gotmpl2text < main.tmpl
-```
-
-**Behavior:**
-
-- Files are comma-separated and loaded in order
-- Preloaded content is concatenated before the STDIN template
-- Missing preload files cause an error with exit code 2
-
-**Example:**
-
-```bash
-# common.tmpl contains shared definitions
-cat > common.tmpl <<'EO_TEMPLATE'
-{{- define "app.name" -}}
-my-app
-{{- end -}}
-EO_TEMPLATE
-
-# main template uses the preloaded definitions
-GOTMPL_PRELOAD="common.tmpl" gotmpl2text <<'EO_TEMPLATE'
-Application: {{ include "app.name" . }}
-EO_TEMPLATE
-```
-
-Frankly speaking this is a syntax sugar.
-I personally use it for the case when I know some common definitions template must be included:
-it's easier to just export environment variable than passing full set of files each time.
-The same behavior can be achieved by using `cat`:
-
-```bash
-cat common.tmpl helpers.tmpl base.tmpl | gotmpl2text data.yaml
-```
-
-## CUSTOM FUNCTIONS
+### Custom functions
 
 You can define custom template functions using Sprig template syntax in a YAML file.
 
@@ -342,7 +309,7 @@ Add this line to the top of your `functions.yaml`:
 # yaml-language-server: $schema=https://raw.githubusercontent.com/andrew-grechkin/gotmpl2text/main/schemas/functions.yaml
 ```
 
-### Typed Custom Functions
+#### Typed custom functions
 
 Custom functions can specify their return type using the `type:` field. Supported types match Sprig conventions:
 
@@ -350,6 +317,47 @@ Custom functions can specify their return type using the `type:` field. Supporte
 - `int64` - integers for arithmetic (matches Sprig `add`, `div`, etc.)
 - `float64` - floating-point numbers
 - `bool` - boolean values for conditionals
+
+## TEMPLATE PRELOADING
+
+You can preload template files containing common `{{define}}` blocks via the `GOTMPL_PRELOAD` environment variable.
+This is useful when working with systems that store shared template definitions in separate files.
+
+```bash
+# Preload common definitions
+GOTMPL_PRELOAD="common.tmpl,helpers.tmpl" gotmpl2text < main.tmpl
+```
+
+**Behavior:**
+
+- Files are comma-separated and loaded in order
+- Preloaded content is concatenated before the STDIN template
+- Missing preload files cause an error with exit code 2
+
+**Example:**
+
+```bash
+# common.tmpl contains shared definitions
+cat > common.tmpl <<'EO_TEMPLATE'
+{{- define "app.name" -}}
+my-app
+{{- end -}}
+EO_TEMPLATE
+
+# main template uses the preloaded definitions
+GOTMPL_PRELOAD="common.tmpl" gotmpl2text <<'EO_TEMPLATE'
+Application: {{ include "app.name" . }}
+EO_TEMPLATE
+```
+
+Frankly speaking this is a syntax sugar.
+I personally use it for the case when I know some common definitions template must be included:
+it's easier to just export environment variable than passing full set of files each time.
+The same behavior can be achieved by using `cat`:
+
+```bash
+cat common.tmpl helpers.tmpl base.tmpl | gotmpl2text data.yaml
+```
 
 ## DEBUG MODE
 
@@ -376,9 +384,9 @@ For example one can use `gotmpl2text` in CI pipelines to validate templates befo
   run: go install github.com/andrew-grechkin/gotmpl2text@latest
 
 - name: Test Kubernetes manifests
-  run: |
+  run: |-
     for tmpl in k8s/*.tmpl; do
-      gotmpl2text values.yaml < "$tmpl" | kubectl apply --dry-run=client -f -
+        gotmpl2text values.yaml < "$tmpl" | kubectl apply --dry-run=client -f -
     done
 ```
 
@@ -388,7 +396,7 @@ For example one can use `gotmpl2text` in CI pipelines to validate templates befo
 test:templates:
   script: |-
     go install github.com/andrew-grechkin/gotmpl2text@latest
-    gotmpl2text base.yaml overrides.yaml < deployment.tmpl > deployment.yaml
+    gotmpl2text < deployment.tmpl base.yaml overrides.yaml > deployment.yaml
     kubectl apply --dry-run=client -f deployment.yaml
 ```
 
@@ -397,11 +405,12 @@ test:templates:
 ```bash
 #!/usr/bin/env bash
 # .git/hooks/pre-commit
-for tmpl in $(git diff --cached --name-only | grep '\.tmpl$$'); do
-  if ! gotmpl2text values.yaml < "$tmpl" > /dev/null 2>&1; then
-    echo "Template validation failed: $tmpl"
-    exit 1
-  fi
+for tmpl in $(git diff --cached --name-only | grep '\.tmpl$'); do
+    if ! gotmpl2text < "$tmpl" values.yaml > &>/dev/null; then
+        echo "Template validation failed: $tmpl"
+        gotmpl2text < "$tmpl" values.yaml
+        exit 1
+    fi
 done
 ```
 
