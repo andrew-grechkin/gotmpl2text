@@ -5,6 +5,12 @@ additionalProperties: false
 description: Schema for gotmpl2text custom template functions configuration
 
 properties:
+  $schema:
+    default: https://raw.githubusercontent.com/andrew-grechkin/gotmpl2text/main/schemas/functions.yaml
+    description: URL for the JSON Schema that defines the structure of this file.
+    format: uri
+    type: string
+
   functions:
     description: Array of custom template function definitions
     items:
@@ -38,5 +44,5 @@ properties:
 required:
   - functions
 
-title: gotmpl2text Custom Functions
+title: gotmpl2text Custom functions
 type: object

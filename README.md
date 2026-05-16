@@ -273,14 +273,11 @@ You can define custom template functions using Sprig template syntax in a YAML f
 
 ```yaml
 ---
-# yaml-language-server: $schema=https://raw.githubusercontent.com/andrew-grechkin/gotmpl2text/main/schemas/functions.yaml
+$schema: https://raw.githubusercontent.com/andrew-grechkin/gotmpl2text/main/schemas/functions.yaml
 functions:
   - name: myFunc
     template: |-
       {{- . | toString | upper -}}
-  - name: slugify
-    template: |-
-      {{- regexReplaceAll "[^a-z0-9]+" (. | toString | lower) "-" | trimSuffix "-" -}}
 ```
 
 **Example usage:**
@@ -289,6 +286,7 @@ functions:
 # Create custom functions file
 cat > ~/.config/gotmpl2text/functions.yaml <<'EO_FUNCTIONS'
 ---
+$schema: https://raw.githubusercontent.com/andrew-grechkin/gotmpl2text/main/schemas/functions.yaml
 functions:
   - name: shout
     template: |-
@@ -302,13 +300,6 @@ gotmpl2text <<< '{{ "hello" | shout }}'
 
 See [examples/functions.yaml](examples/functions.yaml) for more examples.
 
-**IDE Support:** A [JSON Schema](schemas/functions.yaml) is provided for IDE autocomplete and validation.
-Add this line to the top of your `functions.yaml`:
-
-```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/andrew-grechkin/gotmpl2text/main/schemas/functions.yaml
-```
-
 #### Typed custom functions
 
 Custom functions can specify their return type using the `type:` field. Supported types match Sprig conventions:
@@ -317,6 +308,22 @@ Custom functions can specify their return type using the `type:` field. Supporte
 - `int64` - integers for arithmetic (matches Sprig `add`, `div`, etc.)
 - `float64` - floating-point numbers
 - `bool` - boolean values for conditionals
+
+#### IDE Support
+
+A [JSON Schema](schemas/functions.yaml) is provided for IDE autocomplete and validation.
+
+You can enable it by adding the `$schema` key to your `functions.yaml`:
+
+```yaml
+$schema: https://raw.githubusercontent.com/andrew-grechkin/gotmpl2text/main/schemas/functions.yaml
+```
+
+Alternatively, use the `yaml-language-server` magic comment:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/andrew-grechkin/gotmpl2text/main/schemas/functions.yaml
+```
 
 ## TEMPLATE PRELOADING
 

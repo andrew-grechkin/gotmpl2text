@@ -1,6 +1,8 @@
 ---
 # yaml-language-server: $schema=https://raw.githubusercontent.com/andrew-grechkin/gotmpl2text/main/schemas/functions.yaml
 
+$schema: https://raw.githubusercontent.com/andrew-grechkin/gotmpl2text/main/schemas/functions.yaml
+
 functions:
   # toHarnessId: Convert strings to Harness.io compatible identifiers
   # Escapes underscores and replaces special characters with underscores
