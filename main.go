@@ -8,6 +8,7 @@ import (
 	"io"
 	"maps"
 	"os"
+	"path/filepath"
 	"regexp"
 	"runtime/debug"
 	"strings"
@@ -90,12 +91,17 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 
 	verbose := os.Getenv(ENV_DEBUG) == "1"
 
+	preloadFiles, err := parsePreloadTemplatesEnv(verbose)
+	if err != nil {
+		return err
+	}
+
 	tmplContent, data, err := prepareTemplateAndData(stdin, args, verbose)
 	if err != nil {
 		return err
 	}
 
-	tmpl, err := buildTemplate(tmplContent, verbose)
+	tmpl, err := buildTemplate(tmplContent, preloadFiles, verbose)
 	if err != nil {
 		return err
 	}
@@ -280,16 +286,15 @@ func helmFuncMap() template.FuncMap {
 	return funcMap
 }
 
-// loadPreloadTemplates loads template files specified in GOTMPL_PRELOAD
-// Returns concatenated content of all preload files
-func loadPreloadTemplates(verbose bool) (string, error) {
+// parsePreloadTemplatesEnv splits and returns files specified in GOTMPL_PRELOAD
+func parsePreloadTemplatesEnv(verbose bool) ([]string, error) {
+	var preloadFiles []string
+
 	preloadEnv := os.Getenv(ENV_PRELOAD)
 	if preloadEnv == "" {
-		return "", nil
+		return preloadFiles, nil
 	}
 
-	// Split by comma and trim whitespace
-	var preloadFiles []string
 	parts := strings.Split(preloadEnv, ",")
 	for i := range parts {
 		if trimmed := strings.TrimSpace(parts[i]); trimmed != "" {
@@ -297,31 +302,40 @@ func loadPreloadTemplates(verbose bool) (string, error) {
 		}
 	}
 
-	if len(preloadFiles) == 0 {
-		return "", nil
-	}
-
-	if verbose {
+	if verbose && len(preloadFiles) > 0 {
 		fmt.Fprintf(os.Stderr, "[debug] Preloading %d template file(s)\n", len(preloadFiles))
-	}
-
-	// Load and concatenate all preload files
-	var result strings.Builder
-	for _, file := range preloadFiles {
-		if verbose {
+		for _, file := range preloadFiles {
 			fmt.Fprintf(os.Stderr, "[debug]   - %s\n", file)
 		}
-		content, err := os.ReadFile(file)
-		if err != nil {
-			return "", &PreloadError{File: file, Err: err}
-		}
-		result.Write(content)
 	}
 
-	return result.String(), nil
+	// Verify files exist and convert absolute paths to relative
+	var cwd string
+	var err error
+	for i, file := range preloadFiles {
+		if _, err = os.Stat(file); err != nil {
+			return preloadFiles, &PreloadError{File: file, Err: err}
+		}
+
+		if filepath.IsAbs(file) {
+			if cwd == "" {
+				cwd, err = os.Getwd()
+				if err != nil {
+					return preloadFiles, fmt.Errorf("error getting current directory: %w", err)
+				}
+			}
+			relPath, err := filepath.Rel(cwd, file)
+			if err != nil {
+				return preloadFiles, fmt.Errorf("error converting %s to relative path: %w", file, err)
+			}
+			preloadFiles[i] = relPath
+		}
+	}
+
+	return preloadFiles, nil
 }
 
-// prepareTemplateAndData reads stdin, loads preload files, processes template and merges data
+// prepareTemplateAndData reads stdin, processes template and merges data
 func prepareTemplateAndData(stdin io.Reader, args []string, verbose bool) (string, map[string]any, error) {
 	if verbose {
 		fmt.Fprintln(os.Stderr, "[debug] gotmpl2text starting")
@@ -336,14 +350,7 @@ func prepareTemplateAndData(stdin io.Reader, args []string, verbose bool) (strin
 		fmt.Fprintf(os.Stderr, "[debug] Read %d bytes from STDIN\n", len(tmplBytes))
 	}
 
-	preloadedContent, err := loadPreloadTemplates(verbose)
-	if err != nil {
-		return "", nil, err
-	}
-
-	fullTemplate := preloadedContent + string(tmplBytes)
-
-	tmplContent, data, err := processTemplate(fullTemplate, args)
+	tmplContent, data, err := processTemplate(string(tmplBytes), args)
 	if err != nil {
 		return "", nil, err
 	}
@@ -369,7 +376,7 @@ func getMissingKeyOption() string {
 }
 
 // buildTemplate builds and parses the template with all function maps
-func buildTemplate(tmplContent string, verbose bool) (*template.Template, error) {
+func buildTemplate(tmplContent string, preloadFiles []string, verbose bool) (*template.Template, error) {
 	missingKeyOpt := getMissingKeyOption()
 	funcMap := helmFuncMap()
 
@@ -380,20 +387,45 @@ func buildTemplate(tmplContent string, verbose bool) (*template.Template, error)
 		maps.Copy(funcMap, customFuncs)
 	}
 
-	tmpl := template.New(TEMPLATE_NAME).Funcs(funcMap).Option(missingKeyOpt)
+	// Create a variable to hold the template reference for the include function
+	// and set it after parsing
+	var tmplPtr *template.Template
 	var err error
+
+	// This MUST be done before creating the template so that all templates
+	// (including preload files) have access to the proper include function
+
+	// Replace the stub include function in funcMap with one that uses tmplPtr
+	funcMap["include"] = func(name string, data any) (string, error) {
+		if tmplPtr == nil {
+			return "", fmt.Errorf("template not initialized")
+		}
+		buf := new(bytes.Buffer)
+		err := tmplPtr.ExecuteTemplate(buf, name, data)
+		return buf.String(), err
+	}
+
+	tmpl := template.New(TEMPLATE_NAME).Funcs(funcMap).Option(missingKeyOpt)
+
+	// I decided that it's better if preload templates can depend on custom functions, not other way around
+	// Parse preload template files manually to preserve relative paths as template names
+	// This ensures error messages show the relative path (e.g., "dir/file.tmpl:10" instead of just "file.tmpl:10")
+	for _, file := range preloadFiles {
+		content, err := os.ReadFile(file)
+		if err != nil {
+			return nil, fmt.Errorf("error reading preload template file %s: %w", file, err)
+		}
+		if _, err = tmpl.New(file).Parse(string(content)); err != nil {
+			return nil, fmt.Errorf("error parsing preload template file %s: %w", file, err)
+		}
+	}
+
 	if tmpl, err = tmpl.Parse(tmplContent); err != nil {
 		return nil, fmt.Errorf("error parsing template: %w", err)
 	}
 
-	// Add include function that needs the parsed template
-	tmpl.Funcs(template.FuncMap{
-		"include": func(name string, data any) (string, error) {
-			buf := new(bytes.Buffer)
-			err := tmpl.ExecuteTemplate(buf, name, data)
-			return buf.String(), err
-		},
-	})
+	// Rendering engine is initialized, now it is set to make sure include function can work (breaking circular dep)
+	tmplPtr = tmpl
 
 	return tmpl, nil
 }
