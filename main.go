@@ -190,19 +190,18 @@ func mergeAllDataMaps(allDataMaps []map[string]any) (map[string]any, error) {
 
 // splitTemplateData splits template content from embedded data sections
 // Returns (tmplText, dataBlocks) where dataBlocks contains all embedded YAML blocks
-// Looks for ALL {{/* __DATA__ */}} blocks and extracts them in order
+// The template text is returned unchanged since {{/* __DATA__ */}} comments are already
+// ignored by the template parser, and removing them would break line number reporting in errors
 func splitTemplateData(content string) (string, []string) {
 	// Go's regexp package shamefully doesn't support the (?x) free-spacing flag,
 	// so have to use string concatenation instead.
 	re := regexp.MustCompile(
-		`\n*` + // optional new lines
-			`\{\{/\*` + // match opening comment: {{/*
+		`\{\{/\*` + // match opening comment: {{/*
 			`\s*` + // optional whitespace
 			`__DATA__` + // match the expected data marker
 			`\s*` + // optional whitespace
 			`([\s\S]*?)` + // group 1: Capture the actual data (non-greedy)
-			`\*/\}\}` + // match closing comment: */}}
-			`\n*`, // optional new lines
+			`\*/\}\}`, // match closing comment: */}}
 	)
 
 	var dataBlocks []string
@@ -214,8 +213,7 @@ func splitTemplateData(content string) (string, []string) {
 		}
 	}
 
-	tmplText := re.ReplaceAllString(content, "\n")
-	return tmplText, dataBlocks
+	return content, dataBlocks
 }
 
 // indentLines adds padding to non-empty lines in a string

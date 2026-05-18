@@ -22,42 +22,33 @@ func TestSplitTemplateData(t *testing.T) {
 	tests := []struct {
 		name       string
 		content    string
-		wantTmpl   string
 		wantBlocks []string
 	}{
 		{
 			name:       "single __DATA__ block",
 			content:    "Hello {{ .name }}\n{{/* __DATA__\nname: world\n*/}}",
-			wantTmpl:   "Hello {{ .name }}\n",
 			wantBlocks: []string{"name: world"},
 		},
 		{
 			name:       "multiple blocks",
 			content:    "Hello\n{{/* __DATA__\na: 1\n*/}}\nWorld\n{{/* __DATA__\nb: 2\n*/}}",
-			wantTmpl:   "Hello\nWorld\n",
 			wantBlocks: []string{"a: 1", "b: 2"},
 		},
 		{
 			name:       "no blocks",
 			content:    "Hello {{ .name }}",
-			wantTmpl:   "Hello {{ .name }}",
 			wantBlocks: nil,
 		},
 		{
 			name:       "whitespace variations",
 			content:    "Hello\n\n\n{{/*   __DATA__  \nspaced\n*/}}\n\n\n",
-			wantTmpl:   "Hello\n",
 			wantBlocks: []string{"spaced"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotTmpl, gotBlocks := splitTemplateData(tt.content)
-
-			if gotTmpl != tt.wantTmpl {
-				t.Errorf("splitTemplateData() gotTmpl = %q, want %q", gotTmpl, tt.wantTmpl)
-			}
+			_, gotBlocks := splitTemplateData(tt.content)
 
 			if !reflect.DeepEqual(gotBlocks, tt.wantBlocks) {
 				t.Errorf("splitTemplateData() gotBlocks = %q, want %q", gotBlocks, tt.wantBlocks)

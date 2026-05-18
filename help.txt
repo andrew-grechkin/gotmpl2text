@@ -17,6 +17,6 @@ Environment:
   GOTMPL_DEBUG          Set to 1 to enable debug mode (diagnostic output to stderr)
 
 Examples:
-  gotmpl2text < template.tmpl base.yaml overrides.yaml
+  gotmpl2text < template.tmpl base.yaml override.yaml
 
   gotmpl2text <<< '{{ .name }}' <(echo '{"name":"test"}')
