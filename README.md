@@ -69,7 +69,7 @@ export PATH="${GOBIN:-${GOPATH:-$HOME/go}/bin}:$PATH"
 - Embedded data support - include YAML data in template with `{{/* __DATA__ ... */}}` comment
 - Includes [Sprig](http://masterminds.github.io/sprig/) template functions
 - Includes Helm-specific functions: `include`, `required`, `toYaml`, `fromYaml`, `nindent`, `indent`
-- Extra functions: `toJson`, `uuidv7`, `uuidv7ToEpoch`, `uuidv7ToEpochNs`
+- Extra functions: `uuidv7`, `uuidv7ToEpoch`, `uuidv7ToEpochNs`
 
 ### Use cases
 
@@ -102,13 +102,13 @@ gotmpl2text <<< '{{ .name }}: {{ .replicas }}' <(echo '{"name":"my-service","rep
 Or with actual files:
 
 ```bash
-gotmpl2text < template.tmpl data.yaml override.json
+gotmpl2text < template.tmpl data.yaml
 ```
 
 Or [UUOC](<https://en.wikipedia.org/wiki/Cat_(Unix)#Useless_use_of_cat>), if one would like:
 
 ```bash
-cat template.tmpl | gotmpl2text data.yaml override.json
+cat template.tmpl | gotmpl2text data.yaml
 ```
 
 ### Multiple data files with deep merge
@@ -123,7 +123,7 @@ gotmpl2text \
 Or with actual files:
 
 ```bash
-gotmpl2text < template.tmpl base.yaml override.yaml
+gotmpl2text < template.tmpl base.yaml override.yaml override2.json
 ```
 
 Later files override earlier ones (just like with `helm install -f base.yaml -f override.yaml`).
@@ -231,12 +231,6 @@ Also available: `fromYaml` (parse YAML string)
 ### Additional functions
 
 Beyond Sprig and Helm functions, `gotmpl2text` provides:
-
-**`toJson`** - Convert a value to JSON string:
-
-```bash
-gotmpl2text <<< '{{ . | toJson }}' <(echo $'hash:\n  key: value')
-```
 
 **`uuidv7`** - Generate time-ordered UUID v7:
 
