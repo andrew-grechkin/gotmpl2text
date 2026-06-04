@@ -332,8 +332,7 @@ func TestPreloadTemplatesFileNotFound(t *testing.T) {
 	}
 
 	// Verify it's a PreloadError
-	var preloadErr *PreloadError
-	if !reflect.TypeOf(err).ConvertibleTo(reflect.TypeOf(preloadErr)) {
+	if !reflect.TypeOf(err).ConvertibleTo(reflect.TypeFor[*PreloadError]()) {
 		t.Errorf("run() expected PreloadError, got %T", err)
 	}
 

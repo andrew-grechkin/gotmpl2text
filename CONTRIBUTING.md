@@ -2,7 +2,7 @@
 
 ## Development Setup
 
-To get started with development, you'll need Go (version 1.21 or higher) installed on your system.
+To get started with development, you'll need Go (version 1.25 or higher) installed on your system.
 Optionally, you can install `just` for simplified command execution.
 
 ### Building the Project
