@@ -96,7 +96,7 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 		return err
 	}
 
-	tmplContent, data, err := prepareTemplateAndData(stdin, args, verbose)
+	tmplContent, data, err := prepareTemplateAndData(stdin, args, preloadFiles, verbose)
 	if err != nil {
 		return err
 	}
@@ -113,11 +113,15 @@ func run(args []string, stdin io.Reader, stdout io.Writer) error {
 	return nil
 }
 
-func processTemplate(template string, args []string) (string, map[string]any, error) {
+func processTemplate(template string, preloadDataBlocks []string, args []string) (string, map[string]any, error) {
 	tmplContent, embeddedDataBlocks := splitTemplateData(template)
 
 	var allDataMaps []map[string]any
 	var err error
+
+	if allDataMaps, err = collectDataFromEmbeddedBlocks(allDataMaps, preloadDataBlocks); err != nil {
+		return "", nil, err
+	}
 
 	if allDataMaps, err = collectDataFromEmbeddedBlocks(allDataMaps, embeddedDataBlocks); err != nil {
 		return "", nil, err
@@ -334,7 +338,7 @@ func parsePreloadTemplatesEnv(verbose bool) ([]string, error) {
 }
 
 // prepareTemplateAndData reads stdin, processes template and merges data
-func prepareTemplateAndData(stdin io.Reader, args []string, verbose bool) (string, map[string]any, error) {
+func prepareTemplateAndData(stdin io.Reader, args []string, preloadFiles []string, verbose bool) (string, map[string]any, error) {
 	if verbose {
 		fmt.Fprintln(os.Stderr, "[debug] gotmpl2text starting")
 	}
@@ -348,7 +352,17 @@ func prepareTemplateAndData(stdin io.Reader, args []string, verbose bool) (strin
 		fmt.Fprintf(os.Stderr, "[debug] Read %d bytes from STDIN\n", len(tmplBytes))
 	}
 
-	tmplContent, data, err := processTemplate(string(tmplBytes), args)
+	var preloadDataBlocks []string
+	for _, file := range preloadFiles {
+		content, err := os.ReadFile(file)
+		if err != nil {
+			return "", nil, fmt.Errorf("error reading preload template file %s: %w", file, err)
+		}
+		_, blocks := splitTemplateData(string(content))
+		preloadDataBlocks = append(preloadDataBlocks, blocks...)
+	}
+
+	tmplContent, data, err := processTemplate(string(tmplBytes), preloadDataBlocks, args)
 	if err != nil {
 		return "", nil, err
 	}

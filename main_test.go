@@ -321,6 +321,34 @@ Title
 	}
 }
 
+func TestPreloadTemplatesEmbeddedData(t *testing.T) {
+	// __DATA__ blocks embedded in preload template files should be
+	// extracted and merged into the template data, the same way __DATA__
+	// blocks in the stdin template are.
+	preloadFile := "preload-with-data.tmpl"
+	preloadContent := `{{- define "greeting" -}}Hello, {{ .name }}!{{- end -}}
+{{/* __DATA__
+name: from-preload
+*/}}`
+	if err := os.WriteFile(preloadFile, []byte(preloadContent), 0644); err != nil {
+		t.Fatalf("Failed to write preload file: %v", err)
+	}
+	defer os.Remove(preloadFile)
+
+	os.Setenv("GOTMPL_PRELOAD", preloadFile)
+	defer os.Unsetenv("GOTMPL_PRELOAD")
+
+	got, err := runTemplate(t, `{{ include "greeting" . }}`)
+	if err != nil {
+		t.Fatalf("run() failed: %v", err)
+	}
+
+	want := "Hello, from-preload!"
+	if got != want {
+		t.Errorf("run() got output %q, want %q", got, want)
+	}
+}
+
 func TestPreloadTemplatesFileNotFound(t *testing.T) {
 	os.Setenv("GOTMPL_PRELOAD", "/nonexistent/file.tmpl")
 	defer os.Unsetenv("GOTMPL_PRELOAD")
