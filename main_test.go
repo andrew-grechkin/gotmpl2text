@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -367,5 +368,133 @@ func TestPreloadTemplatesFileNotFound(t *testing.T) {
 	// Verify error message contains the file name
 	if !strings.Contains(err.Error(), "/nonexistent/file.tmpl") {
 		t.Errorf("run() error message should contain file name, got: %v", err)
+	}
+}
+
+func TestHelmFunctions(t *testing.T) {
+	tests := []struct {
+		name     string
+		template string
+		want     string
+		wantErr  bool
+	}{
+		{
+			name:     "toYaml on string strips trailing newline",
+			template: `[{{ "hello" | toYaml }}]`,
+			want:     "[hello]",
+		},
+		{
+			name:     "fromYaml then toYaml roundtrip",
+			template: `{{ "a: 1\nb: 2" | fromYaml | toYaml }}`,
+			want:     "a: 1\nb: 2",
+		},
+		{
+			name:     "nindent adds leading newline and indents",
+			template: `x:{{ "hello" | nindent 2 }}`,
+			want:     "x:\n  hello",
+		},
+		{
+			name:     "indent has no leading newline",
+			template: `{{ "hello" | indent 4 }}`,
+			want:     "    hello",
+		},
+		{
+			name:     "required passes non-empty value through",
+			template: `{{ required "x must be set" "y" }}`,
+			want:     "y",
+		},
+		{
+			name:     "required errors on empty string",
+			template: `{{ required "x must be set" "" }}`,
+			wantErr:  true,
+		},
+		{
+			name:     "required errors on nil value",
+			template: "{{ required \"x must be set\" .nilval }}\n{{/* __DATA__\nnilval: null\n*/}}",
+			wantErr:  true,
+		},
+		{
+			name:     "include executes named template",
+			template: `{{- define "greet" -}}Hi {{ . }}{{- end -}}{{ include "greet" "Bob" }}`,
+			want:     "Hi Bob",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := runTemplate(t, tt.template)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("run() expected error but got none")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("run() failed: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("run() got output %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRunMultipleDataFilesMerge(t *testing.T) {
+	// Verifies deep-merge semantics across multiple data files:
+	// later files override earlier ones, but nested keys not present
+	// in the later file are preserved from the earlier file.
+	dir := t.TempDir()
+	base := filepath.Join(dir, "base.yaml")
+	override := filepath.Join(dir, "override.yaml")
+
+	baseContent := "name: base\nreplicas: 3\nconfig:\n  timeout: 30\n  debug: false\n"
+	if err := os.WriteFile(base, []byte(baseContent), 0644); err != nil {
+		t.Fatalf("write base: %v", err)
+	}
+
+	overrideContent := "replicas: 5\nconfig:\n  debug: true\n  cache: enabled\n"
+	if err := os.WriteFile(override, []byte(overrideContent), 0644); err != nil {
+		t.Fatalf("write override: %v", err)
+	}
+
+	template := `{{ .name }}|{{ .replicas }}|{{ .config.timeout }}|{{ .config.debug }}|{{ .config.cache }}`
+	got, err := runTemplate(t, template, base, override)
+	if err != nil {
+		t.Fatalf("run() failed: %v", err)
+	}
+
+	// name: only in base → preserved
+	// replicas: in both → override wins
+	// config.timeout: only in base → preserved (deep merge)
+	// config.debug: in both → override wins
+	// config.cache: only in override → added
+	want := "base|5|30|true|enabled"
+	if got != want {
+		t.Errorf("run() got output %q, want %q", got, want)
+	}
+}
+
+func TestIndentLines(t *testing.T) {
+	tests := []struct {
+		name   string
+		spaces int
+		input  string
+		want   string
+	}{
+		{"empty string", 4, "", ""},
+		{"zero spaces", 0, "hello", "hello"},
+		{"single line", 2, "hello", "  hello"},
+		{"multi-line", 2, "a\nb\nc", "  a\n  b\n  c"},
+		{"blank lines preserved without padding", 2, "a\n\nb", "  a\n\n  b"},
+		{"trailing newline preserved", 2, "a\n", "  a\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := indentLines(tt.spaces, tt.input)
+			if got != tt.want {
+				t.Errorf("indentLines(%d, %q) = %q, want %q", tt.spaces, tt.input, got, tt.want)
+			}
+		})
 	}
 }
