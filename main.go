@@ -38,6 +38,7 @@ const (
 	ENV_DEBUG         = "GOTMPL_DEBUG"
 	MISSINGKEY_ERROR  = "missingkey=error"
 	MISSINGKEY_ALLOW  = "missingkey=default"
+	PRELOAD_SEPARATOR = string(os.PathListSeparator) // ":" on Unix, ";" on Windows
 )
 
 //go:embed help.txt
@@ -297,7 +298,7 @@ func parsePreloadTemplatesEnv(verbose bool) ([]string, error) {
 		return preloadFiles, nil
 	}
 
-	parts := strings.Split(preloadEnv, ",")
+	parts := strings.Split(preloadEnv, PRELOAD_SEPARATOR)
 	for i := range parts {
 		if trimmed := strings.TrimSpace(parts[i]); trimmed != "" {
 			preloadFiles = append(preloadFiles, trimmed)

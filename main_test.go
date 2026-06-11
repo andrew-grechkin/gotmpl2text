@@ -264,7 +264,7 @@ func TestPreloadTemplates(t *testing.T) {
 		},
 		{
 			name:     "multiple preload files",
-			preload:  helpersFile + "," + commonFile,
+			preload:  helpersFile + PRELOAD_SEPARATOR + commonFile,
 			template: `{{ include "greeting" "Test" }} {{ include "banner" "Title" }}`,
 			want: `Hello, Test! =================================
 Title
@@ -273,7 +273,7 @@ Title
 		},
 		{
 			name:     "preload with spaces in list",
-			preload:  helpersFile + " , " + commonFile,
+			preload:  helpersFile + " " + PRELOAD_SEPARATOR + " " + commonFile,
 			template: `{{ include "upper" "hello" }}`,
 			want:     "HELLO",
 			wantErr:  false,

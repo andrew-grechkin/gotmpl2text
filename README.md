@@ -43,7 +43,7 @@ EO_TEMPLATE
 - GOTMPL_ALLOW_MISSING=1: to allow missing keys (renders `<no value>`)
 - GOTMPL_IGNORE_EMBED=1: to ignore embedded `__DATA__` blocks
 - GOTMPL_FUNCTIONS: path to custom functions YAML file (see [Custom Functions](#custom-functions))
-- GOTMPL_PRELOAD: comma-separated list of template files to preload (see [Template Preloading](#template-preloading))
+- GOTMPL_PRELOAD: colon-separated list of template files to preload (semicolon on Windows) (see [Template Preloading](#template-preloading))
 - GOTMPL_DEBUG=1: enable debug mode (diagnostic output to stderr)
 
 ## INSTALLATION
@@ -326,12 +326,12 @@ This is useful when working with systems that store shared template definitions 
 
 ```bash
 # Preload common definitions
-GOTMPL_PRELOAD="common.tmpl,helpers.tmpl" gotmpl2text < main.tmpl
+GOTMPL_PRELOAD="common.tmpl:helpers.tmpl" gotmpl2text < main.tmpl
 ```
 
 **Behavior:**
 
-- Files are comma-separated and loaded in order
+- Files are separated by the OS-native PATH list separator (`:` on Unix, `;` on Windows) and loaded in order
 - Preloaded content is concatenated before the STDIN template
 - Missing preload files cause an error with exit code 2
 
