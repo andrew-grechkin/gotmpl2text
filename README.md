@@ -1,7 +1,6 @@
 # gotmpl2text
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/andrew-grechkin/gotmpl2text.svg)](https://pkg.go.dev/github.com/andrew-grechkin/gotmpl2text)
-[![Go Report Card](https://goreportcard.com/badge/github.com/andrew-grechkin/gotmpl2text)](https://goreportcard.com/report/github.com/andrew-grechkin/gotmpl2text)
 
 A CLI filter for testing and rendering Go templates with YAML/JSON data.
 
@@ -48,6 +47,14 @@ EO_TEMPLATE
 
 ## INSTALLATION
 
+### Using [`mise`](https://mise.jdx.dev)
+
+```bash
+mise use go:github.com/andrew-grechkin/gotmpl2text@latest
+```
+
+### Building from source
+
 ```bash
 go install github.com/andrew-grechkin/gotmpl2text@latest
 ```
@@ -88,6 +95,7 @@ export PATH="${GOBIN:-${GOPATH:-$HOME/go}/bin}:$PATH"
 # Templates can use Sprig functions without any data:
 gotmpl2text <<< 'Random: {{ randAlpha 10 }}'
 gotmpl2text <<< 'UUID v4: {{ uuidv4 }}'
+gotmpl2text <<< 'UUID v7: {{ uuidv7 }}'
 gotmpl2text <<< 'Date: {{ now | date "2006-01-02" }}'
 ```
 
@@ -351,14 +359,14 @@ Application: {{ include "app.name" . }}
 EO_TEMPLATE
 ```
 
-Frankly speaking this is a syntax sugar.
-I personally use it for the case when I know some common definitions template must be included:
-it's easier to just export environment variable than passing full set of files each time.
-The same behavior can be achieved by using `cat`:
+Similar behavior can be achieved by using `cat`:
 
 ```bash
 cat common.tmpl helpers.tmpl base.tmpl | gotmpl2text data.yaml
 ```
+
+Using `GOTMPL_PRELOAD` has an advantage - all occurred errors will be reported with correct filename and line number.
+Using `cat` will report incorrect line numbers (because tool receives all templates in this case as one big file).
 
 ## DEBUG MODE
 
