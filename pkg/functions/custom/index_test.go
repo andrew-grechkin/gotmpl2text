@@ -1,9 +1,142 @@
-package main
+package custom
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"text/template"
 )
+
+func TestLoadNoConfigReturnsEmptyMap(t *testing.T) {
+	// No config path resolvable: unset all env inputs and point HOME at a
+	// nonexistent directory so getPath() returns "".
+	t.Setenv("GOTMPL_FUNCTIONS", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", "")
+
+	got, err := Load(template.FuncMap{}, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("Load returned nil map; expected empty map")
+	}
+	if len(got) != 0 {
+		t.Errorf("expected empty map, got %d entries", len(got))
+	}
+}
+
+func TestLoadMissingFileReturnsEmptyMap(t *testing.T) {
+	t.Setenv("GOTMPL_FUNCTIONS", "/nonexistent/gotmpl2text/functions.yaml")
+
+	got, err := Load(template.FuncMap{}, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("Load returned nil map; expected empty map")
+	}
+	if len(got) != 0 {
+		t.Errorf("expected empty map, got %d entries", len(got))
+	}
+}
+
+func TestLoadCompilesFunctionsFromYAML(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "functions.yaml")
+	yaml := `functions:
+  - name: shout
+    template: "{{ . | upper }}"
+  - name: getLength
+    template: "{{ . | len }}"
+    type: int64
+  - name: isEmpty
+    template: "{{ if eq . \"\" }}true{{ else }}false{{ end }}"
+    type: bool
+`
+	if err := os.WriteFile(cfg, []byte(yaml), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	t.Setenv("GOTMPL_FUNCTIONS", cfg)
+
+	// baseFuncMap must expose the primitives the templates use (upper, len).
+	base := template.FuncMap{
+		"upper": strings.ToUpper,
+		"len":   func(s string) int { return len(s) },
+	}
+
+	fm, err := Load(base, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	shout := fm["shout"].(func(any) (any, error))
+	out, err := shout("hello")
+	if err != nil {
+		t.Fatalf("shout: %v", err)
+	}
+	if out != "HELLO" {
+		t.Errorf("shout: got %v, want HELLO", out)
+	}
+
+	getLength := fm["getLength"].(func(any) (any, error))
+	out, err = getLength("hello")
+	if err != nil {
+		t.Fatalf("getLength: %v", err)
+	}
+	if got, ok := out.(int64); !ok || got != 5 {
+		t.Errorf("getLength: got %v (%T), want int64(5)", out, out)
+	}
+
+	isEmpty := fm["isEmpty"].(func(any) (any, error))
+	out, err = isEmpty("")
+	if err != nil {
+		t.Fatalf("isEmpty: %v", err)
+	}
+	if got, ok := out.(bool); !ok || got != true {
+		t.Errorf("isEmpty(\"\"): got %v (%T), want true", out, out)
+	}
+}
+
+func TestLoadUnknownTypeErrors(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "functions.yaml")
+	yaml := `functions:
+  - name: bad
+    template: "{{ . }}"
+    type: uint32
+`
+	if err := os.WriteFile(cfg, []byte(yaml), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	t.Setenv("GOTMPL_FUNCTIONS", cfg)
+
+	_, err := Load(template.FuncMap{}, false)
+	if err == nil {
+		t.Fatal("expected error for unknown type")
+	}
+	if !strings.Contains(err.Error(), `unknown type "uint32"`) {
+		t.Errorf("error should mention unknown type, got: %v", err)
+	}
+}
+
+func TestLoadMalformedYAMLErrors(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "functions.yaml")
+	if err := os.WriteFile(cfg, []byte(":\n  not: valid: yaml:"), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	t.Setenv("GOTMPL_FUNCTIONS", cfg)
+
+	_, err := Load(template.FuncMap{}, false)
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+	if !strings.Contains(err.Error(), "parsing custom functions YAML") {
+		t.Errorf("error should mention YAML parsing, got: %v", err)
+	}
+}
 
 func TestStringAdapter(t *testing.T) {
 	adapter := typeAdapters["string"]
