@@ -1,0 +1,8 @@
+substitute: bar foo foo
+substitute with capture: value=key
+substituteAll: aN bN cN
+splitBy unlimited: [a b c d]
+splitBy limited: [a b,c,d]
+test match: yes
+test no match: no
+match groups: user,example.com

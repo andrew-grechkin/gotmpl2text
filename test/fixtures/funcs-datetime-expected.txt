@@ -1,0 +1,10 @@
+iso datetime: 2024-03-15 14:07:09
+weekday: Friday
+month abbrev: Mar
+day of year: 075
+epoch: 1710511629
+timezone name: UTC
+timezone offset: +0000
+date-only input: 2024/03/15
+unknown token pass-through: %Q
+literal percent: 100%

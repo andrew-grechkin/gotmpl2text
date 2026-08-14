@@ -1,0 +1,15 @@
+toJson: {{ .m | toJson }}
+toPrettyJson:
+{{ .m | toPrettyJson }}
+toRawJson (no HTML escaping): {{ "<b>&</b>" | toRawJson }}
+toJsonL:
+{{ .items | toJsonL }}
+fromJson object: {{ (fromJson "{\"a\":1,\"b\":2}") | toJson }}
+fromJson array: {{ fromJson "[10,20,30]" | join "," }}
+fromJson scalar: {{ fromJson "42" }}
+{{/* __DATA__
+m: {a: 1, b: hello}
+items:
+  - {id: 1, name: alice}
+  - {id: 2, name: bob}
+*/}}

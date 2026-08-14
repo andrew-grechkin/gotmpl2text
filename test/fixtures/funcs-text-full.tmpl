@@ -1,0 +1,8 @@
+basic: {{ "hello" | slug }}
+mixed case: {{ "HelloWorld" | slug }}
+with spaces: {{ "hello world" | slug }}
+with punctuation: {{ "Hello, World! (v2.0)" | slug }}
+digits kept: {{ "top 10 hits 2024" | slug }}
+leading trash: {{ "!!!leading" | slug }}
+trailing trash: {{ "trailing!!!" | slug }}
+underscores collapse: {{ "my_var_name" | slug }}

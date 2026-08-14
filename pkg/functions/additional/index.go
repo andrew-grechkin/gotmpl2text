@@ -9,6 +9,15 @@ import (
 	"maps"
 	"text/template"
 
+	"github.com/andrew-grechkin/gotmpl2text/pkg/functions/additional/datetime"
+	"github.com/andrew-grechkin/gotmpl2text/pkg/functions/additional/dict"
+	"github.com/andrew-grechkin/gotmpl2text/pkg/functions/additional/env"
+	"github.com/andrew-grechkin/gotmpl2text/pkg/functions/additional/host"
+	"github.com/andrew-grechkin/gotmpl2text/pkg/functions/additional/json"
+	"github.com/andrew-grechkin/gotmpl2text/pkg/functions/additional/predicate"
+	"github.com/andrew-grechkin/gotmpl2text/pkg/functions/additional/proc"
+	"github.com/andrew-grechkin/gotmpl2text/pkg/functions/additional/regex"
+	"github.com/andrew-grechkin/gotmpl2text/pkg/functions/additional/text"
 	"github.com/andrew-grechkin/gotmpl2text/pkg/functions/additional/uuid"
 )
 
@@ -17,11 +26,24 @@ import (
 // this package NOT here that ALSO exists in helm.FuncMap() is an accidental shadow that must be renamed or explicitly
 // added here. TestNoUnexpectedOverrides enforces both halves
 var ExpectedOverrides = map[string]struct{}{
+	"toJson":       {}, // sprig ships silent variant; we halt on marshal error
+	"toPrettyJson": {}, // sprig ships silent variant; we halt on marshal error
+	"toRawJson":    {}, // sprig ships silent variant; we halt on marshal error
+	"fromJson":     {}, // sprig ships silent variant that only accepts objects; we halt on error and accept any JSON value
 }
 
 // lists every topic's FuncMap constructor in a stable order so tests can iterate them. Later maps override earlier ones
 // on name collision, which is what TestFuncMapNamesUnique guards against
 var subFuncMaps = []func() template.FuncMap{
+	datetime.FuncMap,
+	dict.FuncMap,
+	env.FuncMap,
+	host.FuncMap,
+	json.FuncMap,
+	predicate.FuncMap,
+	proc.FuncMap,
+	regex.FuncMap,
+	text.FuncMap,
 	uuid.FuncMap,
 }
 

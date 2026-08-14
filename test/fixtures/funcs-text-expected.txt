@@ -1,0 +1,8 @@
+basic: hello
+mixed case: helloworld
+with spaces: hello-world
+with punctuation: hello-world-v2-0
+digits kept: top-10-hits-2024
+leading trash: leading
+trailing trash: trailing
+underscores collapse: my-var-name

@@ -1,0 +1,4 @@
+{{- $uuid := "019e1c72-7449-7195-b65b-b7c7f94ed77e" -}}
+UUID: {{ $uuid }}
+Epoch seconds: {{ $uuid | uuidv7ToEpoch }}
+Epoch nanoseconds: {{ $uuid | uuidv7ToEpochNs }}

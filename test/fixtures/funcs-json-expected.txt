@@ -1,0 +1,13 @@
+toJson: {"a":1,"b":"hello"}
+toPrettyJson:
+{
+  "a": 1,
+  "b": "hello"
+}
+toRawJson (no HTML escaping): "<b>&</b>"
+toJsonL:
+{"id":1,"name":"alice"}
+{"id":2,"name":"bob"}
+fromJson object: {"a":1,"b":2}
+fromJson array: 10,20,30
+fromJson scalar: 42

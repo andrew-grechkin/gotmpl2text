@@ -1,0 +1,21 @@
+isString "hi": {{ isString "hi" }}
+isString 42: {{ isString 42 }}
+isNumber 42: {{ isNumber 42 }}
+isNumber "42": {{ isNumber "42" }}
+isNumber true: {{ isNumber true }}
+isBool true: {{ isBool true }}
+isBool "true": {{ isBool "true" }}
+isSlice list: {{ isSlice .arr }}
+isSlice map: {{ isSlice .m }}
+isMap map: {{ isMap .m }}
+isMap list: {{ isMap .arr }}
+isNil null value: {{ isNil .nothing }}
+isNil empty string: {{ isNil .empty }}
+isNil zero int: {{ isNil .zero }}
+{{/* __DATA__
+arr: [1, 2, 3]
+m: {a: 1}
+nothing: null
+empty: ""
+zero: 0
+*/}}

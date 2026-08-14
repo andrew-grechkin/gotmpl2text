@@ -1,0 +1,8 @@
+substitute: {{ "foo foo foo" | substitute "foo" "bar" }}
+substitute with capture: {{ "key=value" | substitute "(\\w+)=(\\w+)" "$2=$1" }}
+substituteAll: {{ "a1 b22 c333" | substituteAll "[0-9]+" "N" }}
+splitBy unlimited: {{ "a,b,c,d" | splitBy "," }}
+splitBy limited: {{ "a,b,c,d" | splitBy "," 2 }}
+test match: {{ if "v1.2.3" | test "^v[0-9]+" }}yes{{ else }}no{{ end }}
+test no match: {{ if "abc" | test "^v[0-9]+" }}yes{{ else }}no{{ end }}
+match groups: {{ "user@example.com" | match "^([^@]+)@(.+)$" | join "," }}

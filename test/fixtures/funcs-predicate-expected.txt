@@ -1,0 +1,14 @@
+isString "hi": true
+isString 42: false
+isNumber 42: true
+isNumber "42": false
+isNumber true: false
+isBool true: true
+isBool "true": false
+isSlice list: true
+isSlice map: false
+isMap map: true
+isMap list: false
+isNil null value: true
+isNil empty string: false
+isNil zero int: false

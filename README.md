@@ -43,7 +43,7 @@ EO_TEMPLATE
 - GOTMPL_IGNORE_EMBED=1: to ignore embedded `__DATA__` blocks
 - GOTMPL_FUNCTIONS: path to custom functions YAML file (see [Custom Functions](#custom-functions))
 - GOTMPL_PRELOAD: colon-separated list of template files to preload (semicolon on Windows) (see [Template Preloading](#template-preloading))
-- GOTMPL_DEBUG=1: enable debug mode (diagnostic output to stderr)
+- GOTMPL_DEBUG=1: enable debug mode (diagnostic output to STDERR)
 
 ## INSTALLATION
 
@@ -238,7 +238,7 @@ Also available: `fromYaml` (parse YAML string)
 
 ### Additional functions
 
-Beyond Sprig and Helm functions, `gotmpl2text` provides:
+#### UUID functions
 
 **`uuidv7`** - Generate time-ordered UUID v7:
 
@@ -260,6 +260,316 @@ For dates beyond this range, use `uuidv7ToEpoch`.
 ```bash
 gotmpl2text <<< '{{ uuidv7 | uuidv7ToEpoch }}'
 ```
+
+#### JSON functions
+
+**`toJsonL`** - JSON Lines / NDJSON: one compact JSON value per line. Common format for streaming logs and batch records.
+Errors if input isn't an array or slice.
+
+```bash
+gotmpl2text <<'EOF'
+{{ .items | toJsonL -}}
+{{/* __DATA__
+items:
+  - {id: 1, name: alice}
+  - {id: 2, name: bob}
+*/}}
+EOF
+# STDOUT:
+# {"id":1,"name":"alice"}
+# {"id":2,"name":"bob"}
+```
+
+##### Sprig overrides
+
+Sprig ships `toJson`/`toPrettyJson`/`toRawJson`/`fromJson` as **silent** variants that swallow errors - on marshal
+failure they return `""` and on unmarshal failure they return `map{"Error": "..."}`. This is dangerous in templating and
+one have to remember to always use `must` versions of these functions because this approach leading to corrupted
+output that downstream code can't distinguish from real data. Since there's no meaningful continuation after a
+serialization failure, this tool replaces those four names with loud variants that halt template execution on error.
+
+Additional fix in `fromJson`: sprig's version only accepted JSON **objects** (returned `map[string]interface{}`). This
+implementation accepts any valid JSON value (object, array, scalar)
+
+```bash
+# Array now parses correctly (sprig's fromJson would error-stash)
+gotmpl2text <<< '{{ range fromJson "[1,2,3]" }}{{ . }} {{ end }}'
+# STDOUT: 1 2 3
+
+# Malformed JSON halts the template (was silent corruption)
+gotmpl2text <<< '{{ fromJson "not valid" }}'
+# STDERR: template: STDIN:1:3: ... error calling fromJson: fromJson: invalid character ...
+```
+
+#### Regex functions
+
+**`test`** - Return `true` if the regex matches anywhere in the text:
+
+```bash
+gotmpl2text <<< '{{ if "v1.2.3" | test "^v[0-9]+" }}looks like a version{{ end }}'
+# STDOUT: looks like a version
+```
+
+**`match`** - Return capture groups as a slice (full match excluded). Empty slice on no match:
+
+```bash
+gotmpl2text <<< '{{ range ("user@example.com" | match "^([^@]+)@(.+)$") }}{{ . }} {{ end }}'
+# STDOUT: user example.com
+```
+
+Sprig's regex helpers have awkward argument orders that don't compose well in pipelines, so `gotmpl2text` ships its own
+set:
+
+**`substitute`** - Replace the first regex match (like Perl `s///r`):
+
+```bash
+gotmpl2text <<< '{{ "foo foo foo" | substitute "foo" "bar" }}'
+# STDOUT: bar foo foo
+```
+
+Capture groups can be referenced in the replacement with `$1`, `$2`, ...:
+
+```bash
+gotmpl2text <<< '{{ "key=value" | substitute "(\\w+)=(\\w+)" "$2=$1" }}'
+# STDOUT: value=key
+```
+
+**`substituteAll`** - Replace every regex match (like Perl `s///g`):
+
+```bash
+gotmpl2text <<< '{{ "a1 b22 c333" | substituteAll "[0-9]+" "N" }}'
+# STDOUT: aN bN cN
+```
+
+**`splitBy`** - Split a string by a regex pattern. Two forms. Named `splitBy` (not `split`) to leave sprig's own `split`
+alone; the pattern argument at the call site makes the intent obvious.
+
+```bash
+# unlimited splits: pattern then text
+gotmpl2text <<< '{{ "a,b,c" | splitBy "," }}'
+# STDOUT: [a b c]
+
+# limited splits: pattern, max items, then text
+gotmpl2text <<< '{{ "a,b,c,d" | splitBy "," 2 }}'
+# STDOUT: [a b,c,d]
+```
+
+#### Dict functions
+
+Look up values in nested maps by dotted path. All three read naturally as `value_at path` / `exists_at path` /
+`defined_at path`.
+
+**`valueAt`** - Return the value at a dotted path. Pipeline-friendly, default optional (nil when omitted)
+
+```bash
+gotmpl2text <<'EOF'
+{{ .data | valueAt "server.tls.enabled" }}
+{{/* __DATA__
+data:
+  server:
+    tls:
+      enabled: true
+*/}}
+EOF
+# STDOUT: true
+
+# With default when path is missing
+gotmpl2text <<'EOF'
+{{ .data | valueAt "server.timeout" "30s" }}
+{{/* __DATA__
+data:
+  server:
+    host: localhost
+*/}}
+EOF
+# STDOUT: 30s
+```
+
+**`existsAt`** - Return true if the path resolves. Present but nil counts as existing
+
+```bash
+gotmpl2text <<'EOF'
+{{ if .data | existsAt "server.tls" }}tls block is present{{ end }}
+{{/* __DATA__
+data:
+  server:
+    tls:
+      enabled: null
+*/}}
+EOF
+# STDOUT: tls block is present
+```
+
+**`definedAt`** - Return true only if the path resolves AND its value is non-nil. Use when a present-but-null value
+should be treated the same as missing.
+
+```bash
+gotmpl2text <<'EOF'
+{{ if .data | definedAt "server.tls.enabled" }}tls.enabled is set{{ end }}
+{{/* __DATA__
+data:
+  server:
+    tls:
+      enabled: null
+*/}}
+EOF
+# (no output - value is nil)
+```
+
+
+**`toEntries`** / **`fromEntries`** - jq-style conversion between a map and a slice of `{"key": ..., "value": ...}`
+records. `toEntries` sorts keys lexicographically for deterministic output; `fromEntries` is its inverse.
+
+```bash
+# Map entries as JSONL lines
+gotmpl2text <<'EOF'
+{{ .m | toEntries | toJsonL }}
+{{/* __DATA__
+m: {b: 2, a: 1, c: 3}
+*/}}
+EOF
+# STDOUT:
+# {"key":"a","value":1}
+# {"key":"b","value":2}
+# {"key":"c","value":3}
+
+# Iterate with named fields
+gotmpl2text <<'EOF'
+{{ range .m | toEntries }}- {{ .key }}={{ .value }}
+{{ end -}}
+{{/* __DATA__
+m: {name: alice, role: admin}
+*/}}
+EOF
+# Round-trip: toEntries | fromEntries reproduces the map (with keys sorted).
+```
+
+`fromEntries` treats a missing `value` field as `nil` (matches jq). `key` must be a string; non-string keys error loudly.
+
+#### Time functions
+
+**`strftime`** - Format a time value using C-style tokens, avoiding Go's reference-time layout (`"2006-01-02
+15:04:05"`). Accepts `time.Time`, Unix epoch (int/int64), or RFC3339/date-only string.
+
+Supported tokens: `%Y %y %m %d %H %I %M %S %p %A %a %B %b %j %Z %z %s %e %%`
+
+```bash
+gotmpl2text <<< '{{ "2024-03-15T14:07:09Z" | strftime "%Y-%m-%d %H:%M:%S" }}'
+# STDOUT: 2024-03-15 14:07:09
+
+# For current time, pipe sprig's `now`:
+gotmpl2text <<< '{{ now | strftime "%A, %B %e %Y" }}'
+```
+
+Limitations: no locale-aware weekday / month names (English only), no sub-second tokens (`%N`, `%f`). Unknown tokens are
+passed through verbatim.
+
+#### Type predicates
+
+Bare-name predicates for the common Go template kinds - avoids sprig's stringly-typed `kindIs "map" .` pattern in
+conditionals.
+
+`isString`, `isNumber`, `isBool`, `isSlice`, `isMap`, `isNil`
+
+```bash
+gotmpl2text <<'EOF'
+{{ if isMap .config }}config is a map{{ end }}
+{{ if isNil .missing }}missing is nil{{ end }}
+{{/* __DATA__
+config:
+  host: localhost
+*/}}
+EOF
+```
+
+`isNumber` covers all built-in numeric kinds (int, uint, float variants). `isNil` handles both untyped nil and typed
+nils (nil pointer, nil slice, nil map, nil chan, nil func).
+
+#### String functions
+
+**`slug`** - Convert an arbitrary string into a URL/filename-friendly slug: lowercase, ASCII alphanumerics kept,
+everything else collapsed to a single hyphen, no leading or trailing hyphens.
+
+```bash
+gotmpl2text <<< '{{ "Hello, World! (v2.0)" | slug }}'
+# STDOUT: hello-world-v2-0
+```
+
+Errors if the input produces an empty slug (e.g. `""`, `"!!!"`, `"世界"`) - an empty slug is broken as a URL fragment or
+filename, so we halt at the source rather than let it propagate.
+
+Note: ASCII-only. Non-ASCII characters (diacritics, CJK, emoji) are treated as separators. "café" becomes "caf". For
+full Unicode-aware slugs, pre-process with a normalizer before calling.
+
+#### System functions
+
+> NOTE: any functions in this section are impure. They make template rendering not reproducible and depend on
+> environment they called in.
+
+Runtime and environment access. Like sprig's `env`:
+
+**`getenv`** - Read an environment variable. Returns the value as a string if set (empty string included), or `nil` if
+unset. Optional default fills in for `nil`.
+
+```bash
+FOO=bar gotmpl2text <<< '{{ getenv "FOO" }}'
+# STDOUT: bar
+
+gotmpl2text <<< '{{ getenv "MISSING" "fallback" }}'
+# STDOUT: fallback
+
+# Empty-string is a real value, default is ignored
+FOO= gotmpl2text <<< 'x{{ getenv "FOO" "default" }}y'
+# STDOUT: xy
+```
+
+**Nil-in-concatenation pitfall**: when a var is unset and no default is provided, `getenv` returns `nil`. If you
+concatenate that with a string in a template, Go's default `missingkey` behaviour renders it as `<no value>`:
+
+```bash
+gotmpl2text <<< 'X={{ getenv "MISSING" }}suffix'
+# STDOUT: X=<no value>suffix
+```
+
+Pass an explicit empty default if you want an empty string on missing:
+
+```bash
+gotmpl2text <<< 'X={{ getenv "MISSING" "" }}suffix'
+# STDOUT: X=suffix
+```
+
+Or compose with sprig's `default`:
+
+```bash
+gotmpl2text <<< 'X={{ getenv "MISSING" | default "" }}suffix'
+```
+
+**`hostname`** - Return host name
+
+```bash
+gotmpl2text <<< 'rendering on: {{ hostname }}'
+# STDOUT: rendering on: some-host.local
+```
+
+**`os`** - Return os this binary built for
+
+```bash
+gotmpl2text <<< 'current os: {{ os }}'
+# STDOUT: current os: linux
+```
+
+**`arch`** - Return machine arch
+
+```bash
+gotmpl2text <<< 'current arch: {{ arch }}'
+# STDOUT: current arch: amd64
+```
+
+**`uid`** - Return current user id
+
+**`gid`** - Return current group id
+
+**`cwd`** - Return current working directory
 
 ### Custom functions
 
@@ -297,7 +607,7 @@ EO_FUNCTIONS
 
 # Use the custom function
 gotmpl2text <<< '{{ "hello" | shout }}'
-# Output: HELLO
+# STDOUT: HELLO
 ```
 
 See [examples/functions.yaml](examples/functions.yaml) for more examples.
@@ -376,6 +686,34 @@ Enable debug mode to see diagnostic information about what `gotmpl2text` is doin
 GOTMPL_DEBUG=1 gotmpl2text <<< '{{ .text | indent 4 }}' <(echo '{"text":"hello"}')
 ```
 
+## ERROR MESSAGES
+
+Template errors are emitted to STDERR with one frame per line so tools like vim quickfix and any `path:line:col` parser
+can walk them:
+
+```bash
+# helpers.tmpl
+{{- define "greeting" -}}
+Hi {{ .name }},
+{{ required "email is required" .email }}
+{{- end -}}
+
+# STDIN template
+GOTMPL_PRELOAD=./helpers.tmpl gotmpl2text <<'EOF'
+Report:
+  {{ include "greeting" . }}
+{{/* __DATA__
+name: Alice
+*/}}
+EOF
+# STDERR:
+# template: STDIN:2:5: executing "STDIN" at <include "greeting" .>: error calling include
+# template: ./helpers.tmpl:3:32: executing "greeting" at <.email>: map has no entry for key "email"
+```
+
+Every line starts with `template: ` and has `PATH:LINE:COL:` right after, matching vim's default `errorformat`
+(`template: %f:%l:%c: %m`). Pipe STDERR into `:cbuffer` and both call sites become jumpable quickfix entries.
+
 ## EXIT CODES
 
 - **0**: Success
@@ -422,6 +760,23 @@ for tmpl in $(git diff --cached --name-only | grep '\.tmpl$'); do
     fi
 done
 ```
+
+## MOTIVATION
+
+Two things drive this project:
+
+1. **Be the most composable template renderer for text and config generation**: Read the template from STDIN, take data
+   from files or embed it inline, respect Unix philosophy and conventions (single-purpose filter, exit codes, STDERR for
+   errors, `path:line:col` error format), and stay out of the way of the surrounding pipeline
+2. **Address the sprig design flaws**: Sprig ships a lot of useful functions but has real ergonomic problems - regex
+   helpers with awkward argument orders, `dig` that doesn't handle nested paths cleanly, `toJson`/`fromJson` that
+   silently swallow serialization errors and produce corrupt output the caller can't distinguish from real data, `env`
+   that can't distinguish "unset" from "empty", no proper strftime, no full slugify, single-level `hasKey` with no
+   path-aware existence check. This tool ships replacements and additions in the `additional/*` packages that fix these.
+   Where sprig has both silent and loud variants (`toJson` / `mustToJson`), override the silent name with loud behavior
+   so rendering halts on the first serialization failure instead of continuing with garbage.
+   Non-serialization fixes (regex, path lookup, predicates, strftime, etc.) are additive and coexist with sprig's
+   originals; users pick what reads better
 
 ## AUTHOR
 

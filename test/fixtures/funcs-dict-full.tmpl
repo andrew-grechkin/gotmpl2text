@@ -1,0 +1,21 @@
+valueAt deep: {{ .m | valueAt "server.tls.enabled" }}
+valueAt missing: {{ .m | valueAt "server.timeout" "30s" }}
+existsAt present: {{ .m | existsAt "server.tls" }}
+existsAt missing: {{ .m | existsAt "server.timeout" }}
+existsAt nil value: {{ .m | existsAt "server.nilfield" }}
+definedAt non-nil: {{ .m | definedAt "server.tls.enabled" }}
+definedAt nil value: {{ .m | definedAt "server.nilfield" }}
+definedAt missing: {{ .m | definedAt "server.timeout" }}
+toEntries: {{ .flat | toEntries | toJsonL }}
+fromEntries: {{ .entries | fromEntries | toJson }}
+{{/* __DATA__
+m:
+  server:
+    tls:
+      enabled: true
+    nilfield: null
+flat: {b: 2, a: 1, c: 3}
+entries:
+  - {key: alpha, value: 1}
+  - {key: beta, value: 2}
+*/}}
