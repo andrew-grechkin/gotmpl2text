@@ -8,3 +8,12 @@ timezone offset: +0000
 date-only input: 2024/03/15
 unknown token pass-through: %Q
 literal percent: 100%
+earlier is before now: true
+later is after now: true
+earlier by pipe: true
+later by pipe: true
+earlier with explicit base (dur first): 2024-03-15 13:07:09
+earlier with explicit base (base first): 2024-03-15 13:07:09
+later with explicit base: 2024-03-15 16:07:09
+earlier with base as pipe: 2024-03-15 13:07:09
+later with base as pipe: 2024-03-15 16:07:09

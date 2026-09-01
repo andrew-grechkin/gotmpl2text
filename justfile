@@ -48,7 +48,7 @@ test-int: build
         if [[ -f "test/fixtures/${name}-full.tmpl" ]]; then
             template="test/fixtures/${name}-full.tmpl"
             echo -n "Testing $name (embedded)... " >&2
-            if result=$("$tool" < "$template") && [[ "$result" == "$(cat "$f")" ]]; then
+            if result=$("$bin" < "$template") && [[ "$result" == "$(cat "$f")" ]]; then
                 echo "✓ PASS" >&2
             else
                 echo "✗ FAIL" >&2
