@@ -11,8 +11,95 @@ import (
 
 func FuncMap() template.FuncMap {
 	return template.FuncMap{
+		"earlier":  earlier,
+		"later":    later,
 		"strftime": strftime,
 	}
+}
+
+// nowFn is the current-time source used by earlier/later when no base time is supplied.
+// Overridden by tests for determinism; production callers always see time.Now
+var nowFn = time.Now
+
+// returns a time offset earlier than the base time. The base time defaults to `now` and can be
+// overridden by passing any value toTime() accepts (time.Time, epoch int, RFC3339 or date string).
+// Duration is parsed by time.ParseDuration, so it accepts the strict Go duration syntax only
+// (e.g. "5s", "1h30m", "500ms"). Negative durations are rejected so the verb solely owns direction:
+// callers wanting the future use later().
+//
+// Args are classified by type, not position: any string that parses as a duration is the duration,
+// anything else is the base. So all of these render the same result:
+//
+//	{{ earlier "30m" }}                     # base defaults to now
+//	{{ earlier "30m" now }}                 # explicit base
+//	{{ earlier now "30m" }}                 # order-independent
+//	{{ now | earlier "30m" }}               # pipe puts base last
+//	{{ "30m" | earlier now }}               # pipe puts "30m" last
+//	{{ earlier "30m" "2024-03-15T14:07:09Z" }}  # base parsed from RFC3339 string
+func earlier(args ...any) (time.Time, error) {
+	dur, base, err := resolveDurationAndBase("earlier", args)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if dur < 0 {
+		return time.Time{}, fmt.Errorf("earlier: duration must be non-negative, got %s (use `later` for future times)", dur)
+	}
+	return base.Add(-dur), nil
+}
+
+// returns a time offset later than the base time. See earlier() for input rules
+func later(args ...any) (time.Time, error) {
+	dur, base, err := resolveDurationAndBase("later", args)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if dur < 0 {
+		return time.Time{}, fmt.Errorf("later: duration must be non-negative, got %s (use `earlier` for past times)", dur)
+	}
+	return base.Add(dur), nil
+}
+
+// classifies 1 or 2 args into (duration, base). Any string that parses as a Go duration is the
+// duration; anything else is passed to toTime() as the base. Base defaults to nowFn() when absent.
+// Duplicate-role args or unresolvable input yield a loud error
+func resolveDurationAndBase(name string, args []any) (time.Duration, time.Time, error) {
+	if len(args) == 0 || len(args) > 2 {
+		return 0, time.Time{}, fmt.Errorf("%s: expected 1 or 2 args (duration, base?), got %d", name, len(args))
+	}
+	var (
+		dur     time.Duration
+		durSet  bool
+		base    time.Time
+		baseSet bool
+	)
+	for _, a := range args {
+		if s, ok := a.(string); ok {
+			if parsed, err := time.ParseDuration(s); err == nil {
+				if durSet {
+					return 0, time.Time{}, fmt.Errorf("%s: duplicate duration argument", name)
+				}
+				dur = parsed
+				durSet = true
+				continue
+			}
+		}
+		t, err := toTime(a)
+		if err != nil {
+			return 0, time.Time{}, fmt.Errorf("%s: %w", name, err)
+		}
+		if baseSet {
+			return 0, time.Time{}, fmt.Errorf("%s: duplicate base-time argument", name)
+		}
+		base = t
+		baseSet = true
+	}
+	if !durSet {
+		return 0, time.Time{}, fmt.Errorf("%s: missing duration argument", name)
+	}
+	if !baseSet {
+		base = nowFn()
+	}
+	return dur, base, nil
 }
 
 // maps strftime tokens to Go's reference-time layout tokens. Tokens that don't have a direct Go layout equivalent (%s,

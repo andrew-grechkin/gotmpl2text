@@ -8,3 +8,12 @@ timezone offset: {{ "2024-03-15T14:07:09Z" | strftime "%z" }}
 date-only input: {{ "2024-03-15" | strftime "%Y/%m/%d" }}
 unknown token pass-through: {{ "2024-03-15T14:07:09Z" | strftime "%Q" }}
 literal percent: {{ "2024-03-15T14:07:09Z" | strftime "100%%" }}
+earlier is before now: {{ lt (earlier "1h" | unixEpoch) (now | unixEpoch) }}
+later is after now: {{ gt (later "1h" | unixEpoch) (now | unixEpoch) }}
+earlier by pipe: {{ lt ("30m" | earlier | unixEpoch) (now | unixEpoch) }}
+later by pipe: {{ gt ("30m" | later | unixEpoch) (now | unixEpoch) }}
+earlier with explicit base (dur first): {{ earlier "1h" "2024-03-15T14:07:09Z" | strftime "%Y-%m-%d %H:%M:%S" }}
+earlier with explicit base (base first): {{ earlier "2024-03-15T14:07:09Z" "1h" | strftime "%Y-%m-%d %H:%M:%S" }}
+later with explicit base: {{ later "2h" "2024-03-15T14:07:09Z" | strftime "%Y-%m-%d %H:%M:%S" }}
+earlier with base as pipe: {{ "2024-03-15T14:07:09Z" | earlier "1h" | strftime "%Y-%m-%d %H:%M:%S" }}
+later with base as pipe: {{ "2024-03-15T14:07:09Z" | later "2h" | strftime "%Y-%m-%d %H:%M:%S" }}
