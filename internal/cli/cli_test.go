@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -767,6 +768,354 @@ func TestCustomFunctionTypeErrors(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), tt.wantErrMsg) {
 				t.Errorf("error message %q doesn't contain expected %q", err.Error(), tt.wantErrMsg)
+			}
+		})
+	}
+}
+
+func TestParseRunArgs(t *testing.T) {
+	tests := []struct {
+		name         string
+		args         []string
+		wantHelm     bool
+		wantFiles    []dataFile
+		wantErrMatch string
+	}{
+		{
+			name:      "no flags, all positional",
+			args:      []string{"a.yaml", "b.yaml"},
+			wantFiles: []dataFile{{path: "a.yaml"}, {path: "b.yaml"}},
+		},
+		{
+			name:      "long form space-separated wraps files after it",
+			args:      []string{"--wrap", "Values", "chart/values.yaml"},
+			wantFiles: []dataFile{{path: "chart/values.yaml", wrapKey: "Values"}},
+		},
+		{
+			name:      "short form space-separated",
+			args:      []string{"-w", "Values", "chart/values.yaml"},
+			wantFiles: []dataFile{{path: "chart/values.yaml", wrapKey: "Values"}},
+		},
+		{
+			name:      "long form with equals",
+			args:      []string{"--wrap=Values", "a.yaml"},
+			wantFiles: []dataFile{{path: "a.yaml", wrapKey: "Values"}},
+		},
+		{
+			name:      "short form with equals",
+			args:      []string{"-w=Values", "a.yaml"},
+			wantFiles: []dataFile{{path: "a.yaml", wrapKey: "Values"}},
+		},
+		{
+			name:      "wrap positional: files before wrap unaffected, files after wrapped",
+			args:      []string{"a.yaml", "--wrap", "Values", "b.yaml", "c.yaml"},
+			wantFiles: []dataFile{{path: "a.yaml"}, {path: "b.yaml", wrapKey: "Values"}, {path: "c.yaml", wrapKey: "Values"}},
+		},
+		{
+			name:      "wrap positional: two --wrap keys apply to different files",
+			args:      []string{"--wrap", "A", "a.yaml", "--wrap", "B", "b.yaml"},
+			wantFiles: []dataFile{{path: "a.yaml", wrapKey: "A"}, {path: "b.yaml", wrapKey: "B"}},
+		},
+		{
+			name:     "helm flag alone",
+			args:     []string{"--helm"},
+			wantHelm: true,
+		},
+		{
+			name:      "helm plus positional wrap plus files",
+			args:      []string{"--helm", "ctx.yaml", "--wrap", "Values", "values.yaml"},
+			wantHelm:  true,
+			wantFiles: []dataFile{{path: "ctx.yaml"}, {path: "values.yaml", wrapKey: "Values"}},
+		},
+		{
+			name:         "missing value after --wrap",
+			args:         []string{"--wrap"},
+			wantErrMatch: "--wrap requires a key argument",
+		},
+		{
+			name:         "missing value after -w",
+			args:         []string{"a.yaml", "-w"},
+			wantErrMatch: "-w requires a key argument",
+		},
+		{
+			name:         "empty value in --wrap=",
+			args:         []string{"--wrap="},
+			wantErrMatch: "--wrap= requires a non-empty key argument",
+		},
+		{
+			name:         "empty value in -w=",
+			args:         []string{"-w="},
+			wantErrMatch: "-w= requires a non-empty key argument",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			helm, files, err := parseRunArgs(tt.args)
+			if tt.wantErrMatch != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tt.wantErrMatch)
+				}
+				if !strings.Contains(err.Error(), tt.wantErrMatch) {
+					t.Errorf("error %q does not contain %q", err.Error(), tt.wantErrMatch)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if helm != tt.wantHelm {
+				t.Errorf("helm = %v, want %v", helm, tt.wantHelm)
+			}
+			if !reflect.DeepEqual(files, tt.wantFiles) {
+				t.Errorf("files = %+v, want %+v", files, tt.wantFiles)
+			}
+		})
+	}
+}
+
+func TestRunWrap(t *testing.T) {
+	// The wrap flag lifts each data file's content under a top-level key so template snippets that reference
+	// `.Values.foo` can be tested against a chart's flat values.yaml with no pre-processing. Embedded __DATA__ blocks
+	// must NOT be wrapped: they are the template author's own data, not external values
+	dir := t.TempDir()
+	valuesPath := filepath.Join(dir, "values.yaml")
+	if err := os.WriteFile(valuesPath, []byte("name: api\nreplicas: 3\n"), 0644); err != nil {
+		t.Fatalf("write values: %v", err)
+	}
+	overridePath := filepath.Join(dir, "override.yaml")
+	if err := os.WriteFile(overridePath, []byte("replicas: 5\n"), 0644); err != nil {
+		t.Fatalf("write override: %v", err)
+	}
+	emptyPath := filepath.Join(dir, "empty.yaml")
+	if err := os.WriteFile(emptyPath, []byte(""), 0644); err != nil {
+		t.Fatalf("write empty: %v", err)
+	}
+	// context file: unwrapped, would be placed BEFORE --wrap on the command line so it stays at the root
+	contextPath := filepath.Join(dir, "context.yaml")
+	if err := os.WriteFile(contextPath, []byte("Release:\n  Name: custom-release\n"), 0644); err != nil {
+		t.Fatalf("write context: %v", err)
+	}
+	// pre-wrapped: file already has "Values:" at top. With --wrap Values applied, this gets DOUBLE-wrapped now (the
+	// no-double-wrap escape hatch is gone; user expresses intent positionally instead)
+	preWrappedPath := filepath.Join(dir, "prewrapped.yaml")
+	if err := os.WriteFile(preWrappedPath, []byte("Values:\n  replicas: 7\n"), 0644); err != nil {
+		t.Fatalf("write prewrapped: %v", err)
+	}
+	// two flat files with distinct top-level keys, used to test that two --wrap flags in one command apply to
+	// different files
+	aFile := filepath.Join(dir, "a.yaml")
+	if err := os.WriteFile(aFile, []byte("x: 1\n"), 0644); err != nil {
+		t.Fatalf("write a: %v", err)
+	}
+	bFile := filepath.Join(dir, "b.yaml")
+	if err := os.WriteFile(bFile, []byte("y: 2\n"), 0644); err != nil {
+		t.Fatalf("write b: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		template string
+		args     []string
+		want     string
+		wantErr  bool
+	}{
+		{
+			name:     "wrap single file under Values",
+			template: `{{ .Values.name }}:{{ .Values.replicas }}`,
+			args:     []string{"--wrap", "Values", valuesPath},
+			want:     "api:3",
+		},
+		{
+			name:     "wrap short flag",
+			template: `{{ .Values.name }}:{{ .Values.replicas }}`,
+			args:     []string{"-w", "Values", valuesPath},
+			want:     "api:3",
+		},
+		{
+			name:     "wrap with equals form",
+			template: `{{ .Values.name }}:{{ .Values.replicas }}`,
+			args:     []string{"--wrap=Values", valuesPath},
+			want:     "api:3",
+		},
+		{
+			name:     "wrap applies to every file and deep-merges",
+			template: `{{ .Values.name }}:{{ .Values.replicas }}`,
+			args:     []string{"--wrap", "Values", valuesPath, overridePath},
+			want:     "api:5",
+		},
+		{
+			name:     "no wrap without flag leaves data at root",
+			template: `{{ .name }}:{{ .replicas }}`,
+			args:     []string{valuesPath},
+			want:     "api:3",
+		},
+		{
+			name:     "wrap does not touch embedded __DATA__ blocks",
+			template: "{{ .Values.name }}:{{ .kind }}\n{{/* __DATA__\nkind: Deployment\n*/}}",
+			args:     []string{"--wrap", "Values", valuesPath},
+			want:     "api:Deployment\n",
+		},
+		{
+			name:     "empty data file with wrap does not clobber earlier data",
+			template: `{{ .Values.name }}:{{ .Values.replicas }}`,
+			args:     []string{"--wrap", "Values", valuesPath, emptyPath},
+			want:     "api:3",
+		},
+		{
+			name:     "wrap with missing key errors when template asks for unwrapped path",
+			template: `{{ .name }}`,
+			args:     []string{"--wrap", "Values", valuesPath},
+			wantErr:  true,
+		},
+		{
+			// files before --wrap stay unwrapped, files after are wrapped. This is the canonical way to mix a
+			// hand-written context file (Release: at root) with a flat chart values.yaml
+			name:     "positional wrap: unwrapped file precedes wrapped file",
+			template: `{{ .Release.Name }}:{{ .Values.name }}`,
+			args:     []string{contextPath, "--wrap", "Values", valuesPath},
+			want:     "custom-release:api",
+		},
+		{
+			// two --wrap flags in one invocation, applied to different files
+			name:     "positional wrap: two distinct wrap keys",
+			template: `{{ .A.x }}:{{ .B.y }}`,
+			args:     []string{"--wrap", "A", aFile, "--wrap", "B", bFile},
+			want:     "1:2",
+		},
+		{
+			// pre-wrapped file with "Values:" at top, run under --wrap Values. Double-wrap is honored now: the parsed
+			// content becomes {Values: {Values: {replicas: 7}}}. Users who don't want this write their invocation as
+			// positional wrap (put the pre-wrapped file BEFORE --wrap)
+			name:     "double wrap is honored (no escape hatch); template must dig through both levels",
+			template: `{{ .Values.Values.replicas }}`,
+			args:     []string{"--wrap", "Values", preWrappedPath},
+			want:     "7",
+		},
+		{
+			// same pre-wrapped file, but placed BEFORE --wrap on the command line: stays at root, no double-wrap
+			name:     "pre-wrapped file placed before --wrap stays single-level",
+			template: `{{ .Values.replicas }}`,
+			args:     []string{preWrappedPath, "--wrap", "Values", emptyPath},
+			want:     "7",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := runTemplate(t, tt.template, tt.args...)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil (output=%q)", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRunHelm(t *testing.T) {
+	// --helm injects dummy Release/Chart/Capabilities/Template context as a defaults layer. Templates that only
+	// reference these standard Helm objects at the scalar/map level work without any data file. Downstream data
+	// (data files, embedded __DATA__) can override individual fields; method-shaped accessors (`.Files.Get`,
+	// `.Capabilities.APIVersions.Has`) are intentionally not supported and errors from them are the expected signal
+	// that the template needs `helm template` proper
+	dir := t.TempDir()
+	releaseOverride := filepath.Join(dir, "release-override.yaml")
+	if err := os.WriteFile(releaseOverride, []byte("Release:\n  Name: my-release\n"), 0644); err != nil {
+		t.Fatalf("write release-override: %v", err)
+	}
+	valuesFile := filepath.Join(dir, "values.yaml")
+	if err := os.WriteFile(valuesFile, []byte("name: api\nreplicas: 3\n"), 0644); err != nil {
+		t.Fatalf("write values: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		template string
+		args     []string
+		want     string
+		wantErr  bool
+	}{
+		{
+			name:     "Release.Name dummy",
+			template: `{{ .Release.Name }}`,
+			args:     []string{"--helm"},
+			want:     "release-name",
+		},
+		{
+			name:     "Release.Namespace dummy",
+			template: `{{ .Release.Namespace }}`,
+			args:     []string{"--helm"},
+			want:     "release-namespace",
+		},
+		{
+			name:     "Chart.Version dummy",
+			template: `{{ .Chart.Version }}`,
+			args:     []string{"--helm"},
+			want:     "0.0.0-dummy",
+		},
+		{
+			name:     "Chart.Name dummy",
+			template: `{{ .Chart.Name }}`,
+			args:     []string{"--helm"},
+			want:     "chart-name",
+		},
+		{
+			name:     "Capabilities.KubeVersion.Major dummy",
+			template: `{{ .Capabilities.KubeVersion.Major }}`,
+			args:     []string{"--helm"},
+			want:     "1",
+		},
+		{
+			name:     "Template.BasePath dummy",
+			template: `{{ .Template.BasePath }}`,
+			args:     []string{"--helm"},
+			want:     "chart-name/templates",
+		},
+		{
+			// dummies are DEFAULTS: user file overrides individual fields via deep-merge, other dummies survive
+			name:     "user data file overrides Release.Name, Chart.Version dummy still visible",
+			template: `{{ .Release.Name }}:{{ .Chart.Version }}`,
+			args:     []string{"--helm", releaseOverride},
+			want:     "my-release:0.0.0-dummy",
+		},
+		{
+			// --helm plays with positional --wrap: unwrapped override file first, then --wrap Values for values.yaml
+			name:     "helm + positional wrap: mixed override and wrapped values",
+			template: `{{ .Release.Name }}:{{ .Values.name }}:{{ .Values.replicas }}`,
+			args:     []string{"--helm", releaseOverride, "--wrap", "Values", valuesFile},
+			want:     "my-release:api:3",
+		},
+		{
+			// without --helm, .Release.Name is a missing key
+			name:     "no --helm means Release is missing",
+			template: `{{ .Release.Name }}`,
+			args:     nil,
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := runTemplate(t, tt.template, tt.args...)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil (output=%q)", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
 			}
 		})
 	}

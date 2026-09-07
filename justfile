@@ -45,6 +45,32 @@ test-int: build
     for f in test/fixtures/*-expected.txt; do
         name=$(basename "$f" -expected.txt)
 
+        # ${name}-args.txt: one CLI argument per line (blank lines and #-comments ignored). Enables fixtures that
+        # exercise flags like --helm and --wrap that the auto-detected -data.yaml / -base+-override pattern cannot
+        # express. Requires ${name}-template.tmpl (or -full.tmpl) alongside
+        args_file="test/fixtures/${name}-args.txt"
+        if [[ -f "$args_file" ]]; then
+            template="test/fixtures/${name}-template.tmpl"
+            if [[ ! -f "$template" ]]; then template="test/fixtures/${name}-full.tmpl"; fi
+            if [[ ! -f "$template" ]]; then
+                echo "✗ FAIL: $name has args.txt but no template" >&2
+                exit 1
+            fi
+            args=()
+            while IFS= read -r line || [[ -n "$line" ]]; do
+                [[ -z "$line" || "$line" == \#* ]] && continue
+                args+=("$line")
+            done < "$args_file"
+            echo -n "Testing $name (with args)... " >&2
+            if result=$("$bin" "${args[@]}" < "$template") && [[ "$result" == "$(cat "$f")" ]]; then
+                echo "✓ PASS" >&2
+            else
+                echo "✗ FAIL" >&2
+                exit 1
+            fi
+            continue
+        fi
+
         if [[ -f "test/fixtures/${name}-full.tmpl" ]]; then
             template="test/fixtures/${name}-full.tmpl"
             echo -n "Testing $name (embedded)... " >&2

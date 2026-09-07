@@ -1,0 +1,2 @@
+# exercises --helm alone: template renders entirely from the dummy Release/Chart/Capabilities/Template context
+--helm

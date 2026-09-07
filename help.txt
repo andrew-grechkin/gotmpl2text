@@ -8,6 +8,11 @@ Options:
   -h, --help        Display help message
   -m, --man         Display full readme         (tip: gotmpl2text --man | colored-md)
   -v, --version     Display version information (tip: gotmpl2text --version | jq -r .Version)
+      --helm        Inject dummy Release/Chart/Capabilities/Template context as
+                    defaults (overridable by any downstream data)
+  -w, --wrap KEY    Wrap every subsequent data file under top-level KEY before
+                    deep-merge; repeat with a different KEY to switch mid-list
+                    (embedded __DATA__ blocks are NOT wrapped)
 
 Environment:
   GOTMPL_ALLOW_MISSING  Set to 1 to allow missing keys (renders <no value>)
@@ -20,3 +25,7 @@ Examples:
   gotmpl2text < template.tmpl base.yaml override.yaml
 
   gotmpl2text <<< '{{ .name }}' <(echo '{"name":"test"}')
+
+  gotmpl2text --wrap Values < snippet.tmpl chart/values.yaml override.yaml
+
+  gotmpl2text --helm ctx.yaml --wrap Values < snippet.tmpl chart/values.yaml

@@ -1,0 +1,4 @@
+release: {{ .Release.Name }}
+name: {{ .Values.name }}
+replicas: {{ .Values.replicas }}
+image: {{ .Values.image.repository }}:{{ .Values.image.tag }}

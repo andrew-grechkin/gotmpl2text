@@ -36,6 +36,8 @@ EO_TEMPLATE
 - -h, --help Display help message
 - -m, --man Display full readme (tip: gotmpl2text --man | colored-md)
 - -v, --version Display version information (tip: gotmpl2text --version | jq -r .Version)
+- --helm Inject dummy Release/Chart/Capabilities/Template context as defaults (see [Helm context defaults](#helm-context-defaults))
+- -w, --wrap KEY Wrap every subsequent data file under top-level KEY (see [Wrapping data files under a top-level key](#wrapping-data-files-under-a-top-level-key))
 
 ## ENVIRONMENT
 
@@ -198,6 +200,104 @@ EO_TEMPLATE
 - Shows base + override patterns in a single file
 - No need for separate data files during development
 - Works as a contract to expose what data need's to be provided
+
+### Wrapping data files under a top-level key
+
+Helm templates reference values as `{{ .Values.foo }}`, but a chart's `values.yaml` is a flat map at the top level. To
+test a Helm template snippet with a real `values.yaml` without pre-processing it, pass `--wrap Values` (short form
+`-w`) and every data file **after that flag** will be wrapped under that key before deep-merging:
+
+```bash
+gotmpl2text --wrap Values < snippet.tmpl chart/values.yaml override.yaml
+# each of chart/values.yaml and override.yaml is wrapped under `Values:`, then deep-merged
+```
+
+`--wrap` is **positional**: it applies only to files that follow it on the command line. This lets you mix
+unwrapped context files with wrapped values files in a single invocation:
+
+```bash
+# helm-context.yaml stays at the root (contains `Release:`, `Chart:` at top level);
+# chart/values.yaml is a flat map that gets wrapped under `Values:`
+gotmpl2text < snippet.tmpl helm-context.yaml --wrap Values chart/values.yaml
+```
+
+Repeat `--wrap` to switch keys partway through the list:
+
+```bash
+gotmpl2text < snippet.tmpl --wrap Values values.yaml --wrap Extra extras.yaml
+# values.yaml wrapped under Values, extras.yaml wrapped under Extra
+```
+
+All four flag forms are accepted: `--wrap KEY`, `-w KEY`, `--wrap=KEY`, `-w=KEY`. Empty KEY is rejected.
+
+Notes:
+
+- Empty files (YAML parses to nil) are skipped rather than wrapped as `{KEY: null}`, so they do not clobber earlier
+  files during deep-merge.
+- Embedded `__DATA__` blocks are **not** wrapped: those are the template author's own data, not values fed from
+  outside. Mix freely with `--wrap` on the command line.
+- Files that already declare the wrap key at their top level get double-wrapped (`{KEY: {KEY: ...}}`). To avoid this,
+  put such files **before** any `--wrap` flag on the command line so they stay at the root.
+
+### Helm context defaults
+
+Real Helm templates reference more than `.Values`: `.Release.Name`, `.Chart.Version`, `.Capabilities.KubeVersion`,
+and friends. Pass `--helm` to inject dummy defaults for these objects as an underlying defaults layer, so a template
+snippet that reads them renders without needing a hand-written context file:
+
+```bash
+gotmpl2text --helm --wrap Values < snippet.tmpl chart/values.yaml
+```
+
+The injected defaults use obvious placeholder values (`release-name`, `0.0.0-dummy`, ...) so they stand out in
+rendered output. They are deep-merged **first**, so anything downstream (a real `GOTMPL_PRELOAD` `__DATA__` block, an
+embedded `__DATA__` block in the template, or a data file argument) overrides them:
+
+```bash
+# override just Release.Name, keep every other dummy
+gotmpl2text --helm < snippet.tmpl <(echo 'Release: {Name: my-release}')
+```
+
+Injected defaults:
+
+```yaml
+Release:
+  Name: release-name
+  Namespace: release-namespace
+  Service: Helm
+  Revision: 1
+  IsInstall: true
+  IsUpgrade: false
+Chart:
+  Name: chart-name
+  Version: 0.0.0-dummy
+  AppVersion: "0.0.0-dummy"
+  APIVersion: v2
+  Type: application
+  Description: dummy Chart injected by gotmpl2text --helm
+Capabilities:
+  KubeVersion:
+    Major: "1"
+    Minor: "30"
+    Version: v1.30.0-dummy
+    GitVersion: v1.30.0-dummy
+  APIVersions: []
+Template:
+  Name: chart-name/templates/dummy.yaml
+  BasePath: chart-name/templates
+```
+
+Not modelled (deliberately):
+
+- `.Files.Get`, `.Files.Glob`, `.Files.Lines`, `.Files.AsConfig`, `.Files.AsSecrets` - method-shaped API, no useful
+  dummy exists. Templates that use them will error.
+- `.Capabilities.APIVersions.Has "..."` - needs a Go method on the slice type. The plain slice is empty and iterable
+  but `.Has` calls will error.
+- `.Capabilities.KubeVersion` treated as a string (Helm's real type has a `String()` method returning `GitVersion`).
+  Here it is a plain map.
+
+If a template reaches for these, that is the signal that `helm template` (with a full chart on disk) is the right
+tool - `gotmpl2text` stays a filter and does not grow chart-directory awareness.
 
 ### Helm-specific functions
 

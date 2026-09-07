@@ -1,0 +1,9 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prod-release-api
+  namespace: release-namespace
+  labels:
+    chart: chart-name-0.0.0-dummy
+spec:
+  replicas: 5

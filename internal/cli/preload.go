@@ -71,10 +71,15 @@ func loadPreloadFiles(verbose bool) ([]preloadFile, error) {
 }
 
 // reads STDIN and merges data from embedded __DATA__ blocks (both in preload files and STDIN), then data files given on
-// argv
-func prepareTemplateAndData(stdin io.Reader, dataFiles []string, preloads []preloadFile, verbose bool) (string, map[string]any, error) {
+// argv. Per-file wrapping (set positionally via --wrap on the command line) is baked into each dataFile at parse time.
+// When helm is true, dummy Release/Chart/Capabilities/Template context is prepended to the preload __DATA__ slot so it
+// acts as defaults overridable by any downstream data source.
+func prepareTemplateAndData(stdin io.Reader, files []dataFile, preloads []preloadFile, helm, verbose bool) (string, map[string]any, error) {
 	if verbose {
 		fmt.Fprintln(os.Stderr, "[debug] gotmpl2text starting")
+		if helm {
+			fmt.Fprintln(os.Stderr, "[debug] Injecting --helm dummy Release/Chart/Capabilities/Template context")
+		}
 	}
 
 	tmplBytes, err := io.ReadAll(stdin)
@@ -87,18 +92,21 @@ func prepareTemplateAndData(stdin io.Reader, dataFiles []string, preloads []prel
 	}
 
 	var preloadDataBlocks []string
+	if helm {
+		preloadDataBlocks = append(preloadDataBlocks, helmDefaultsYAML)
+	}
 	for _, p := range preloads {
 		_, blocks := splitTemplateData(p.content)
 		preloadDataBlocks = append(preloadDataBlocks, blocks...)
 	}
 
-	tmplContent, data, err := processTemplate(string(tmplBytes), preloadDataBlocks, dataFiles)
+	tmplContent, data, err := processTemplate(string(tmplBytes), preloadDataBlocks, files)
 	if err != nil {
 		return "", nil, err
 	}
 
-	if verbose && len(dataFiles) > 0 {
-		fmt.Fprintf(os.Stderr, "[debug] Loaded %d data file(s)\n", len(dataFiles))
+	if verbose && len(files) > 0 {
+		fmt.Fprintf(os.Stderr, "[debug] Loaded %d data file(s)\n", len(files))
 	}
 
 	return tmplContent, data, nil

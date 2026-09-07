@@ -1,0 +1,24 @@
+Release:
+  Name: release-name
+  Namespace: release-namespace
+  Service: Helm
+  Revision: 1
+  IsInstall: true
+  IsUpgrade: false
+Chart:
+  Name: chart-name
+  Version: 0.0.0-dummy
+  AppVersion: "0.0.0-dummy"
+  APIVersion: v2
+  Type: application
+  Description: dummy Chart injected by gotmpl2text --helm
+Capabilities:
+  KubeVersion:
+    Major: "1"
+    Minor: "30"
+    Version: v1.30.0-dummy
+    GitVersion: v1.30.0-dummy
+  APIVersions: []
+Template:
+  Name: chart-name/templates/dummy.yaml
+  BasePath: chart-name/templates

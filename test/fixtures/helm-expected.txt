@@ -1,0 +1,9 @@
+release-name: release-name
+release-namespace: release-namespace
+release-service: Helm
+chart-name: chart-name
+chart-version: 0.0.0-dummy
+chart-apiversion: v2
+kube-major: 1
+kube-gitversion: v1.30.0-dummy
+template-basepath: chart-name/templates
