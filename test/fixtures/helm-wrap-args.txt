@@ -1,0 +1,7 @@
+# exercises --helm + positional --wrap Values: dummy Release/Chart defaults, override.yaml shadows Release.Name at
+# the root, then --wrap Values applies to the flat values file that follows
+--helm
+test/fixtures/helm-wrap-override.yaml
+--wrap
+Values
+test/fixtures/helm-wrap-values.yaml

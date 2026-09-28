@@ -1,0 +1,4 @@
+release: my-release
+name: api
+replicas: 3
+image: nginx:1.27

@@ -23,7 +23,7 @@ var dataRe = regexp.MustCompile(
 		`\*/\}\}`, // match closing comment: */}}
 )
 
-func processTemplate(template string, preloadDataBlocks []string, dataFiles []string) (string, map[string]any, error) {
+func processTemplate(template string, preloadDataBlocks []string, files []dataFile) (string, map[string]any, error) {
 	tmplContent, embeddedDataBlocks := splitTemplateData(template)
 
 	var allDataMaps []map[string]any
@@ -37,7 +37,7 @@ func processTemplate(template string, preloadDataBlocks []string, dataFiles []st
 		return "", nil, err
 	}
 
-	if allDataMaps, err = collectDataFromFiles(allDataMaps, dataFiles); err != nil {
+	if allDataMaps, err = collectDataFromFiles(allDataMaps, files); err != nil {
 		return "", nil, err
 	}
 
@@ -70,16 +70,27 @@ func collectDataFromEmbeddedBlocks(allDataMaps []map[string]any, embeddedDataBlo
 	return allDataMaps, nil
 }
 
-func collectDataFromFiles(allDataMaps []map[string]any, dataFiles []string) ([]map[string]any, error) {
-	for _, dataFile := range dataFiles {
-		dataBytes, err := os.ReadFile(dataFile)
+// Each file's wrapKey (set positionally via --wrap at parse time) is applied verbatim: when non-empty, the parsed
+// content is nested under that top-level key before appending. No double-wrap detection - if the intent is to keep a
+// file unwrapped, the caller expresses that by placing it before any --wrap flag on the command line. One escape
+// hatch remains: empty files (yaml unmarshals to nil) are passed through unwrapped so their nil doesn't clobber a
+// prior file's key via deep-merge.
+//
+// Embedded __DATA__ blocks are intentionally NOT wrapped: those are the template author's own data, not values fed
+// from outside.
+func collectDataFromFiles(allDataMaps []map[string]any, files []dataFile) ([]map[string]any, error) {
+	for _, f := range files {
+		dataBytes, err := os.ReadFile(f.path)
 		if err != nil {
-			return nil, fmt.Errorf("error reading data file %s: %w", dataFile, err)
+			return nil, fmt.Errorf("error reading data file %s: %w", f.path, err)
 		}
 
 		var fileData map[string]any
 		if err := yaml.Unmarshal(dataBytes, &fileData); err != nil {
-			return nil, fmt.Errorf("error parsing YAML data from %s: %w", dataFile, err)
+			return nil, fmt.Errorf("error parsing YAML data from %s: %w", f.path, err)
+		}
+		if f.wrapKey != "" && fileData != nil {
+			fileData = map[string]any{f.wrapKey: fileData}
 		}
 		allDataMaps = append(allDataMaps, fileData)
 	}

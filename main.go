@@ -26,8 +26,7 @@ func main() {
 
 	if err := cli.Run(os.Args[1:], os.Stdin, os.Stdout); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
-		var pe *cli.PreloadError
-		if errors.As(err, &pe) {
+		if _, ok := errors.AsType[*cli.PreloadError](err); ok {
 			os.Exit(2)
 		}
 		os.Exit(1)
