@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/term"
 )
 
 // holds a preload template's on-disk path (converted to project-relative so template parse errors report
@@ -80,6 +82,10 @@ func prepareTemplateAndData(stdin io.Reader, files []dataFile, preloads []preloa
 		if helm {
 			fmt.Fprintln(os.Stderr, "[debug] Injecting --helm dummy Release/Chart/Capabilities/Template context")
 		}
+	}
+
+	if f, ok := stdin.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+		fmt.Fprintln(os.Stderr, "template is expected to be provided via STDIN (enter manually, ctrl-d when finished)")
 	}
 
 	tmplBytes, err := io.ReadAll(stdin)
