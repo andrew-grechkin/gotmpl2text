@@ -123,6 +123,20 @@ func TestRunMissingKeys(t *testing.T) {
 			want:         "",
 			wantErr:      true,
 		},
+		{
+			name:         "missing key zero (direct interpolation still shows <no value>)",
+			template:     "{{ .missing }}",
+			allowMissing: "zero",
+			want:         "<no value>",
+			wantErr:      false,
+		},
+		{
+			name:         "missing key zero (nil propagates into default)",
+			template:     `{{ default "fallback" .missing }}`,
+			allowMissing: "zero",
+			want:         "fallback",
+			wantErr:      false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -145,6 +159,21 @@ func TestRunMissingKeys(t *testing.T) {
 				t.Errorf("run() got output %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+// under missingkey=zero, a missing key reaches required/default as a real nil (not a sentinel), so required's
+// custom message still fires instead of being pre-empted by argument-evaluation failing first (as it does under
+// missingkey=error)
+func TestRunMissingKeyZeroPreservesRequiredMessage(t *testing.T) {
+	t.Setenv("GOTMPL_ALLOW_MISSING", "zero")
+
+	_, err := runTemplate(t, `{{ required "name is required" .missing }}`)
+	if err == nil {
+		t.Fatalf("run() expected error for missing required value, but got none")
+	}
+	if !strings.Contains(err.Error(), "name is required") {
+		t.Errorf("run() error = %q, want it to contain %q", err.Error(), "name is required")
 	}
 }
 

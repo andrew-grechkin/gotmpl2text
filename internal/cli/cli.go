@@ -44,6 +44,7 @@ const (
 	templateName     = "STDIN"
 	missingKeyError  = "missingkey=error"
 	missingKeyAllow  = "missingkey=default"
+	missingKeyZero   = "missingkey=zero"
 	preloadSeparator = string(os.PathListSeparator) // ":" on Unix, ";" on Windows
 )
 

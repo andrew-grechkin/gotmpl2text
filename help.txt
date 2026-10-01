@@ -15,7 +15,8 @@ Options:
                     (embedded __DATA__ blocks are NOT wrapped)
 
 Environment:
-  GOTMPL_ALLOW_MISSING  Set to 1 to allow missing keys (renders <no value>)
+  GOTMPL_ALLOW_MISSING  Set to 1 to allow missing keys (renders <no value>); set to "zero" to
+                        resolve missing keys to nil instead, so default/required see a real nil
   GOTMPL_IGNORE_EMBED   Set to 1 to ignore embedded __DATA__ blocks
   GOTMPL_FUNCTIONS      Path to custom functions YAML file
   GOTMPL_PRELOAD        Colon-separated list of template files to preload (semicolon on Windows)

@@ -42,6 +42,11 @@ EO_TEMPLATE
 ## ENVIRONMENT
 
 - GOTMPL_ALLOW_MISSING=1: to allow missing keys (renders `<no value>`)
+- GOTMPL_ALLOW_MISSING=zero: to resolve missing keys to `nil` instead of erroring. Direct
+  interpolation of a missing key still renders `<no value>` (so it stays visible in output), but a
+  `nil` reaching a function like `default`/`required` is a real `nil`, so those behave as intended
+  on fully-absent keys instead of being pre-empted by the missing-key error during argument
+  evaluation
 - GOTMPL_IGNORE_EMBED=1: to ignore embedded `__DATA__` blocks
 - GOTMPL_FUNCTIONS: path to custom functions YAML file (see [Custom Functions](#custom-functions))
 - GOTMPL_PRELOAD: colon-separated list of template files to preload (semicolon on Windows) (see [Template Preloading](#template-preloading))

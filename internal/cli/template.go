@@ -15,8 +15,10 @@ import (
 // returns the template missingkey option based on environment variable
 func getMissingKeyOption() string {
 	switch os.Getenv(ENV_ALLOW_MISSING) {
-	case "", "0", "false":
+	case "error", "", "0", "false":
 		return missingKeyError
+	case "zero":
+		return missingKeyZero
 	default:
 		return missingKeyAllow
 	}
