@@ -11,10 +11,94 @@ import (
 
 func FuncMap() template.FuncMap {
 	return template.FuncMap{
-		"earlier":  earlier,
-		"later":    later,
-		"strftime": strftime,
+		"earlier":     earlier,
+		"later":       later,
+		"strftime":    strftime,
+		"toRfc3339":   toRfc3339,
+		"toRfc3339ns": toRfc3339ns,
+		"toIso8601":   toIso8601,
+		"toIso8601ns": toIso8601ns,
+		"toRelTime":   toRelTime,
 	}
+}
+
+// calculates the duration between two time points and formats it as a relative string.
+// Signature: toRelTime target [base]
+// If base is omitted, it defaults to now.
+// Output format: "in 225d 01:48:15" or "ago 04:11:00"
+func toRelTime(args ...any) (string, error) {
+	if len(args) == 0 || len(args) > 2 {
+		return "", fmt.Errorf("toRelTime: expected 1 or 2 args (target, base?), got %d", len(args))
+	}
+
+	target, err := toTime(args[0])
+	if err != nil {
+		return "", fmt.Errorf("toRelTime target: %w", err)
+	}
+
+	base := nowFn()
+	if len(args) == 2 {
+		base, err = toTime(args[1])
+		if err != nil {
+			return "", fmt.Errorf("toRelTime base: %w", err)
+		}
+	}
+
+	diff := target.Sub(base)
+	prefix := "in "
+	if diff < 0 {
+		prefix = "ago "
+		diff = -diff
+	}
+
+	// round to seconds for output
+	diff = diff.Round(time.Second)
+
+	days := int(diff.Hours()) / 24
+	hours := int(diff.Hours()) % 24
+	minutes := int(diff.Minutes()) % 60
+	seconds := int(diff.Seconds()) % 60
+
+	if days > 0 {
+		return fmt.Sprintf("%s%dd %02d:%02d:%02d", prefix, days, hours, minutes, seconds), nil
+	}
+	return fmt.Sprintf("%s%02d:%02d:%02d", prefix, hours, minutes, seconds), nil
+}
+
+// formats a time as RFC3339 string with a space separator for readability ("2006-01-02 15:04:05Z07:00")
+func toRfc3339(t any) (string, error) {
+	tm, err := toTime(t)
+	if err != nil {
+		return "", err
+	}
+	return tm.Format("2006-01-02 15:04:05Z07:00"), nil
+}
+
+// formats a time as RFC3339 string with nanoseconds and space separator
+func toRfc3339ns(t any) (string, error) {
+	tm, err := toTime(t)
+	if err != nil {
+		return "", err
+	}
+	return tm.Format("2006-01-02 15:04:05.999999999Z07:00"), nil
+}
+
+// formats a time as strict ISO8601 string ("2006-01-02T15:04:05Z07:00")
+func toIso8601(t any) (string, error) {
+	tm, err := toTime(t)
+	if err != nil {
+		return "", err
+	}
+	return tm.Format("2006-01-02T15:04:05Z07:00"), nil
+}
+
+// formats a time as strict ISO8601 string with nanoseconds ("2006-01-02T15:04:05.999999999Z07:00")
+func toIso8601ns(t any) (string, error) {
+	tm, err := toTime(t)
+	if err != nil {
+		return "", err
+	}
+	return tm.Format("2006-01-02T15:04:05.999999999Z07:00"), nil
 }
 
 // nowFn is the current-time source used by earlier/later when no base time is supplied.
@@ -205,6 +289,9 @@ func toTime(v any) (time.Time, error) {
 		return time.Unix(int64(t), 0), nil
 	case string:
 		if tm, err := time.Parse(time.RFC3339, t); err == nil {
+			return tm, nil
+		}
+		if tm, err := time.Parse("2006-01-02 15:04:05Z07:00", t); err == nil {
 			return tm, nil
 		}
 		if tm, err := time.Parse("2006-01-02", t); err == nil {

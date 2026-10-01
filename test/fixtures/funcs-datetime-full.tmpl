@@ -17,3 +17,10 @@ earlier with explicit base (base first): {{ earlier "2024-03-15T14:07:09Z" "1h" 
 later with explicit base: {{ later "2h" "2024-03-15T14:07:09Z" | strftime "%Y-%m-%d %H:%M:%S" }}
 earlier with base as pipe: {{ "2024-03-15T14:07:09Z" | earlier "1h" | strftime "%Y-%m-%d %H:%M:%S" }}
 later with base as pipe: {{ "2024-03-15T14:07:09Z" | later "2h" | strftime "%Y-%m-%d %H:%M:%S" }}
+toRfc3339:   {{ "2024-03-15T14:07:09.123456789Z" | toRfc3339 }}
+toRfc3339ns: {{ "2024-03-15T14:07:09.123456789Z" | toRfc3339ns }}
+toIso8601:   {{ "2024-03-15 14:07:09.123456789Z" | toIso8601 }}
+toIso8601ns: {{ "2024-03-15 14:07:09.123456789Z" | toIso8601ns }}
+toRelTime:      {{ toRelTime "2024-03-15 15:30:00Z" "2024-03-15 14:00:00Z" }}
+toRelTime ago:  {{ toRelTime "2024-03-15 14:00:00Z" "2024-03-15 15:30:00Z" }}
+toRelTime days: {{ toRelTime "2024-03-20 15:30:00Z" "2024-03-15 14:00:00Z" }}

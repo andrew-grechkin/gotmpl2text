@@ -17,3 +17,10 @@ earlier with explicit base (base first): 2024-03-15 13:07:09
 later with explicit base: 2024-03-15 16:07:09
 earlier with base as pipe: 2024-03-15 13:07:09
 later with base as pipe: 2024-03-15 16:07:09
+toRfc3339:   2024-03-15 14:07:09Z
+toRfc3339ns: 2024-03-15 14:07:09.123456789Z
+toIso8601:   2024-03-15T14:07:09Z
+toIso8601ns: 2024-03-15T14:07:09.123456789Z
+toRelTime:      in 01:30:00
+toRelTime ago:  ago 01:30:00
+toRelTime days: in 5d 01:30:00

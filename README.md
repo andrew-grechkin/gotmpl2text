@@ -569,6 +569,47 @@ gotmpl2text <<< '{{ now | strftime "%A, %B %e %Y" }}'
 Limitations: no locale-aware weekday / month names (English only), no sub-second tokens (`%N`, `%f`). Unknown tokens are
 passed through verbatim.
 
+**`toRfc3339`** - Format a time value as an RFC 3339 string using a space separator for better readability.
+
+```bash
+gotmpl2text <<< '{{ now | toRfc3339 }}'
+# STDOUT: 2024-10-01 12:00:00Z
+```
+
+**`toRfc3339ns`** - Same as `toRfc3339` but includes nanoseconds if present.
+
+**`toIso8601`** - Format a time value as a strict ISO 8601 string (using `T` as separator).
+
+```bash
+gotmpl2text <<< '{{ now | toIso8601 }}'
+# STDOUT: 2024-10-01T12:00:00Z
+```
+
+**`toIso8601ns`** - Same as `toIso8601` but includes nanoseconds if present.
+
+**`earlier`** / **`later`** - Return a time offset from a base time. Base time defaults to `now`.
+Duration follows Go strict syntax (`5s`, `30m`, `2h`).
+
+```bash
+# 1 hour ago
+gotmpl2text <<< '{{ earlier "1h" | toRfc3339 }}'
+
+# 30 minutes from a specific time
+gotmpl2text <<< '{{ later "30m" "2024-03-15T14:00:00Z" | toRfc3339 }}'
+```
+
+**`toRelTime`** - Calculate the relative duration between two time points.
+
+```bash
+# Relative to now
+gotmpl2text <<< '{{ "2025-01-01T00:00:00Z" | toRelTime }}'
+# STDOUT: in 91d 09:37:12 (example)
+
+# Between two points
+gotmpl2text <<< '{{ toRelTime "2024-03-15 15:30:00Z" "2024-03-15 14:00:00Z" }}'
+# STDOUT: in 01:30:00
+```
+
 #### Type predicates
 
 Bare-name predicates for the common Go template kinds - avoids sprig's stringly-typed `kindIs "map" .` pattern in

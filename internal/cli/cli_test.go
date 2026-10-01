@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -1179,5 +1180,28 @@ func TestUUIDv7DerivedFunctions(t *testing.T) {
 				t.Errorf("got %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestToRelTimeIntegration(t *testing.T) {
+	// Fixed times for deterministic output
+	target := "2024-03-15T15:30:00Z"
+	base := "2024-03-15T14:00:00Z"
+
+	// We can't easily use runTemplate with a map for data here because it expects strings for files
+	// but we can use embedded data
+	embeddedTmpl := fmt.Sprintf(`{{ toRelTime .target .base }}{{/* __DATA__
+target: %s
+base: %s
+*/}}`, target, base)
+
+	got, err := runTemplate(t, embeddedTmpl)
+	if err != nil {
+		t.Fatalf("runTemplate failed: %v", err)
+	}
+
+	want := "in 01:30:00"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }

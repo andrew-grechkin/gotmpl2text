@@ -93,6 +93,82 @@ func TestStrftimeInvalidInputErrors(t *testing.T) {
 	}
 }
 
+func TestRfcAndIso(t *testing.T) {
+	ref := time.Date(2024, 3, 15, 14, 7, 9, 123456789, time.UTC)
+
+	// RFC 3339 allows space as a separator
+	if got, err := toRfc3339(ref); err != nil || got != "2024-03-15 14:07:09Z" {
+		t.Errorf("toRfc3339: got %q err %v", got, err)
+	}
+
+	if got, err := toRfc3339ns(ref); err != nil || got != "2024-03-15 14:07:09.123456789Z" {
+		t.Errorf("toRfc3339ns: got %q err %v", got, err)
+	}
+
+	// ISO 8601 requires T
+	if got, err := toIso8601(ref); err != nil || got != "2024-03-15T14:07:09Z" {
+		t.Errorf("toIso8601: got %q err %v", got, err)
+	}
+
+	if got, err := toIso8601ns(ref); err != nil || got != "2024-03-15T14:07:09.123456789Z" {
+		t.Errorf("toIso8601ns: got %q err %v", got, err)
+	}
+}
+
+func TestToRelTime(t *testing.T) {
+	base := time.Date(2024, 3, 15, 14, 0, 0, 0, time.UTC)
+	withFrozenNow(t, base)
+
+	tests := []struct {
+		name string
+		args []any
+		want string
+	}{
+		{
+			name: "future 10 seconds",
+			args: []any{base.Add(10 * time.Second)},
+			want: "in 00:00:10",
+		},
+		{
+			name: "past 10 seconds",
+			args: []any{base.Add(-10 * time.Second)},
+			want: "ago 00:00:10",
+		},
+		{
+			name: "future with days",
+			args: []any{base.Add(225*24*time.Hour + 1*time.Hour + 48*time.Minute + 15*time.Second)},
+			want: "in 225d 01:48:15",
+		},
+		{
+			name: "past with days",
+			args: []any{base.Add(-(4*time.Hour + 11*time.Minute))},
+			want: "ago 04:11:00",
+		},
+		{
+			name: "explicit base",
+			args: []any{base.Add(1 * time.Hour), base},
+			want: "in 01:00:00",
+		},
+		{
+			name: "string inputs",
+			args: []any{"2024-03-15 15:30:00Z", "2024-03-15 14:00:00Z"},
+			want: "in 01:30:00",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := toRelTime(tt.args...)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // withFrozenNow pins nowFn to a fixed instant for the duration of the test, restoring the previous
 // source on cleanup. Every earlier/later test uses it so results are exact and deterministic
 func withFrozenNow(t *testing.T, at time.Time) {
