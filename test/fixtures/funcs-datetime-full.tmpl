@@ -24,3 +24,11 @@ toIso8601ns: {{ "2024-03-15 14:07:09.123456789Z" | toIso8601ns }}
 toRelTime:      {{ toRelTime "2024-03-15 15:30:00Z" "2024-03-15 14:00:00Z" }}
 toRelTime ago:  {{ toRelTime "2024-03-15 14:00:00Z" "2024-03-15 15:30:00Z" }}
 toRelTime days: {{ toRelTime "2024-03-20 15:30:00Z" "2024-03-15 14:00:00Z" }}
+withOffsetSameInstant string offset: {{ "2024-10-01T12:00:00Z" | withOffsetSameInstant "+02:00" | toRfc3339 }}
+withOffsetSameInstant named zone:    {{ "2024-10-01T12:00:00Z" | withOffsetSameInstant "Europe/Prague" | toRfc3339 }}
+withOffsetSameInstant int seconds:   {{ "2024-10-01T12:00:00Z" | withOffsetSameInstant 3600 | toRfc3339 }}
+withOffsetSameInstant local round-trips to same instant: {{ "2024-10-01T12:00:00Z" | withOffsetSameInstant "local" | withOffsetSameInstant "UTC" | toRfc3339 }}
+withOffsetSameLocal string offset: {{ "2024-10-01T12:00:00Z" | withOffsetSameLocal "+02:00" | toRfc3339 }}
+withOffsetSameLocal named zone:    {{ "2024-10-01T12:00:00Z" | withOffsetSameLocal "Europe/Prague" | toRfc3339 }}
+withOffsetSameLocal int seconds:   {{ "2024-10-01T12:00:00Z" | withOffsetSameLocal 3600 | toRfc3339 }}
+withOffsetSameLocal local preserves wall clock: {{ "2024-10-01T12:00:00Z" | withOffsetSameLocal "local" | strftime "%H:%M:%S" }}

@@ -327,3 +327,132 @@ func TestEarlierAndLaterRejectUnparseable(t *testing.T) {
 		}
 	}
 }
+
+func TestOffsetFunctions(t *testing.T) {
+	ref := time.Date(2024, 10, 1, 12, 0, 0, 0, time.UTC)
+
+	t.Run("withOffsetSameInstant", func(t *testing.T) {
+		tests := []struct {
+			offset any
+			want   string
+		}{
+			{"+02:00", "2024-10-01 14:00:00+02:00"},
+			{"-0500", "2024-10-01 07:00:00-05:00"},
+			{"Z", "2024-10-01 12:00:00Z"},
+			{3600, "2024-10-01 13:00:00+01:00"},
+		}
+		for _, tt := range tests {
+			got, err := withOffsetSameInstant(tt.offset, ref)
+			if err != nil {
+				t.Errorf("offset %v: unexpected error: %v", tt.offset, err)
+				continue
+			}
+			gotStr := got.Format("2006-01-02 15:04:05Z07:00")
+			if gotStr != tt.want {
+				t.Errorf("offset %v: got %q, want %q", tt.offset, gotStr, tt.want)
+			}
+		}
+	})
+
+	t.Run("withOffsetSameLocal", func(t *testing.T) {
+		tests := []struct {
+			offset any
+			want   string
+		}{
+			{"+02:00", "2024-10-01 12:00:00+02:00"},
+			{"-0500", "2024-10-01 12:00:00-05:00"},
+			{"Z", "2024-10-01 12:00:00Z"},
+			{3600, "2024-10-01 12:00:00+01:00"},
+		}
+		for _, tt := range tests {
+			got, err := withOffsetSameLocal(tt.offset, ref)
+			if err != nil {
+				t.Errorf("offset %v: unexpected error: %v", tt.offset, err)
+				continue
+			}
+			gotStr := got.Format("2006-01-02 15:04:05Z07:00")
+			if gotStr != tt.want {
+				t.Errorf("offset %v: got %q, want %q", tt.offset, gotStr, tt.want)
+			}
+		}
+	})
+
+	t.Run("withOffsetSameInstant with named locations (DST awareness)", func(t *testing.T) {
+		// Europe/Prague transitions in 2024:
+		// Mar 31: +0100 -> +0200
+		// Oct 27: +0200 -> +0100
+
+		summer := time.Date(2024, 7, 1, 12, 0, 0, 0, time.UTC)
+		winter := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+
+		gotSummer, err := withOffsetSameInstant("Europe/Prague", summer)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, offset := gotSummer.Zone(); offset != 7200 {
+			t.Errorf("Summer: expected +02:00 (7200s), got offset %d", offset)
+		}
+
+		gotWinter, err := withOffsetSameInstant("Europe/Prague", winter)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, offset := gotWinter.Zone(); offset != 3600 {
+			t.Errorf("Winter: expected +01:00 (3600s), got offset %d", offset)
+		}
+	})
+}
+
+func TestOffsetFunctionsLocal(t *testing.T) {
+	ref := time.Date(2024, 10, 1, 12, 0, 0, 0, time.UTC)
+
+	for _, name := range []string{"local", "LOCAL", "Local"} {
+		t.Run(name, func(t *testing.T) {
+			gotInstant, err := withOffsetSameInstant(name, ref)
+			if err != nil {
+				t.Fatalf("withOffsetSameInstant(%q): unexpected error: %v", name, err)
+			}
+			if gotInstant.Location() != time.Local {
+				t.Errorf("withOffsetSameInstant(%q): location = %v, want time.Local", name, gotInstant.Location())
+			}
+			if !gotInstant.Equal(ref) {
+				t.Errorf("withOffsetSameInstant(%q): instant changed: got %v, want same instant as %v", name, gotInstant, ref)
+			}
+
+			gotLocal, err := withOffsetSameLocal(name, ref)
+			if err != nil {
+				t.Fatalf("withOffsetSameLocal(%q): unexpected error: %v", name, err)
+			}
+			if gotLocal.Location() != time.Local {
+				t.Errorf("withOffsetSameLocal(%q): location = %v, want time.Local", name, gotLocal.Location())
+			}
+			wantClock := ref.Format("2006-01-02 15:04:05")
+			if gotClock := gotLocal.Format("2006-01-02 15:04:05"); gotClock != wantClock {
+				t.Errorf("withOffsetSameLocal(%q): wall clock changed: got %q, want %q", name, gotClock, wantClock)
+			}
+		})
+	}
+}
+
+// Verifies "local" applies whatever offset the system's local timezone actually has at each instant (DST or
+// standard), rather than a fixed offset baked in once. Deliberately does not hardcode an expected offset or assume
+// any particular zone (e.g. Europe/Prague) is configured on the host - it derives the expected offset from
+// time.Local itself for two instants six months apart, so the test passes under any system TZ, DST-observing or not
+func TestOffsetFunctionsLocalTracksSystemOffset(t *testing.T) {
+	instants := []time.Time{
+		time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC),
+		time.Date(2024, 7, 1, 12, 0, 0, 0, time.UTC),
+	}
+
+	for _, instant := range instants {
+		want := instant.In(time.Local)
+
+		got, err := withOffsetSameInstant("local", instant)
+		if err != nil {
+			t.Fatalf("withOffsetSameInstant(%q, %v): unexpected error: %v", "local", instant, err)
+		}
+		if !got.Equal(want) || got.Format("Z07:00") != want.Format("Z07:00") {
+			t.Errorf("withOffsetSameInstant(%q, %v) = %v, want %v", "local", instant, got, want)
+		}
+	}
+}

@@ -598,6 +598,26 @@ gotmpl2text <<< '{{ earlier "1h" | toRfc3339 }}'
 gotmpl2text <<< '{{ later "30m" "2024-03-15T14:00:00Z" | toRfc3339 }}'
 ```
 
+**`withOffsetSameInstant`** - Change the time's offset while preserving the instant in time (same moment, different wall
+clock). Accepts a string ("+02:00", "-0500", "UTC", "Europe/Prague", "local") or integer seconds. `"local"` resolves to
+the system's local timezone (same rules as Go's `time.Local`: the `TZ` environment variable, falling back to
+`/etc/localtime`).
+
+```bash
+# Show UTC time in +02:00
+gotmpl2text <<< '{{ "2024-10-01T12:00:00Z" | withOffsetSameInstant "+02:00" | toRfc3339 }}'
+# STDOUT: 2024-10-01 14:00:00+02:00
+```
+
+**`withOffsetSameLocal`** - Change the time's offset while preserving the wall clock time (different moment, same wall
+clock). Accepts the same offset values as `withOffsetSameInstant`, including `"local"`.
+
+```bash
+# Keep 12:00 but change offset to +02:00
+gotmpl2text <<< '{{ "2024-10-01T12:00:00Z" | withOffsetSameLocal "+02:00" | toRfc3339 }}'
+# STDOUT: 2024-10-01 12:00:00+02:00
+```
+
 **`toRelTime`** - Calculate the relative duration between two time points.
 
 ```bash

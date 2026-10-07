@@ -11,14 +11,84 @@ import (
 
 func FuncMap() template.FuncMap {
 	return template.FuncMap{
-		"earlier":     earlier,
-		"later":       later,
-		"strftime":    strftime,
-		"toRfc3339":   toRfc3339,
-		"toRfc3339ns": toRfc3339ns,
-		"toIso8601":   toIso8601,
-		"toIso8601ns": toIso8601ns,
-		"toRelTime":   toRelTime,
+		"earlier":               earlier,
+		"later":                 later,
+		"strftime":              strftime,
+		"toIso8601":             toIso8601,
+		"toIso8601ns":           toIso8601ns,
+		"toRelTime":             toRelTime,
+		"toRfc3339":             toRfc3339,
+		"toRfc3339ns":           toRfc3339ns,
+		"withOffsetSameInstant": withOffsetSameInstant,
+		"withOffsetSameLocal":   withOffsetSameLocal,
+	}
+}
+
+// change the time's offset while preserving the instant in time (same moment, different wall clock)
+func withOffsetSameInstant(offset any, t any) (time.Time, error) {
+	tm, loc, err := resolveTimeAndLocation(t, offset)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("withOffsetSameInstant: %w", err)
+	}
+	return tm.In(loc), nil
+}
+
+// change the time's offset while preserving the wall clock time (different moment, same wall clock)
+func withOffsetSameLocal(offset any, t any) (time.Time, error) {
+	tm, loc, err := resolveTimeAndLocation(t, offset)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("withOffsetSameLocal: %w", err)
+	}
+	return time.Date(tm.Year(), tm.Month(), tm.Day(), tm.Hour(), tm.Minute(), tm.Second(), tm.Nanosecond(), loc), nil
+}
+
+// resolves the shared (time, location) inputs used by withOffsetSameInstant and withOffsetSameLocal
+func resolveTimeAndLocation(t, offset any) (time.Time, *time.Location, error) {
+	tm, err := toTime(t)
+	if err != nil {
+		return time.Time{}, nil, err
+	}
+	loc, err := toLocation(offset)
+	if err != nil {
+		return time.Time{}, nil, err
+	}
+	return tm, loc, nil
+}
+
+// coerce various representations into a time.Location
+// Supports:
+//   - *time.Location
+//   - string: "UTC"/"Z" (UTC), "local" (the system's local timezone, i.e. Go's time.Local: TZ env var, falling back
+//     to /etc/localtime), named locations ("Europe/Prague"), or offsets ("+02:00", "-0500", "+03")
+//   - int/int64: seconds east of UTC
+func toLocation(v any) (*time.Location, error) {
+	switch val := v.(type) {
+	case *time.Location:
+		return val, nil
+	case string:
+		switch {
+		case val == "" || strings.EqualFold(val, "UTC") || val == "Z":
+			return time.UTC, nil
+		case strings.EqualFold(val, "local"):
+			return time.Local, nil
+		}
+		if l, err := time.LoadLocation(val); err == nil {
+			return l, nil
+		}
+		// Try parsing as offset
+		for _, layout := range []string{"-0700", "-07:00", "-07"} {
+			if t, err := time.Parse(layout, val); err == nil {
+				_, offset := t.Zone()
+				return time.FixedZone("", offset), nil
+			}
+		}
+		return nil, fmt.Errorf("invalid location or offset: %q", val)
+	case int:
+		return time.FixedZone("", val), nil
+	case int64:
+		return time.FixedZone("", int(val)), nil
+	default:
+		return nil, fmt.Errorf("unsupported type %T", v)
 	}
 }
 

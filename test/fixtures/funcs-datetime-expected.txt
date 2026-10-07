@@ -24,3 +24,11 @@ toIso8601ns: 2024-03-15T14:07:09.123456789Z
 toRelTime:      in 01:30:00
 toRelTime ago:  ago 01:30:00
 toRelTime days: in 5d 01:30:00
+withOffsetSameInstant string offset: 2024-10-01 14:00:00+02:00
+withOffsetSameInstant named zone:    2024-10-01 14:00:00+02:00
+withOffsetSameInstant int seconds:   2024-10-01 13:00:00+01:00
+withOffsetSameInstant local round-trips to same instant: 2024-10-01 12:00:00Z
+withOffsetSameLocal string offset: 2024-10-01 12:00:00+02:00
+withOffsetSameLocal named zone:    2024-10-01 12:00:00+02:00
+withOffsetSameLocal int seconds:   2024-10-01 12:00:00+01:00
+withOffsetSameLocal local preserves wall clock: 12:00:00
